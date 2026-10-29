@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>셰프의 테이블 — 관리자</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<style>
+:root{--bg:#0B0B0D;--panel:#15141A;--line:#2A2722;--gold:#C9A646;--gold-l:#EBD68F;--gold-d:#8C6F22;--ink:#F3EEE2;--muted:#A89F8A;--dim:#6E675A;--red:#C25050;--green:#5FA36A}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'Noto Sans KR',sans-serif;font-weight:300;font-size:14px;line-height:1.6}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+h1{font-family:'Cormorant Garamond',serif;color:var(--gold);font-size:28px;letter-spacing:.1em}
+h2{font-size:16px;font-weight:500;color:var(--gold-l);margin-bottom:10px;letter-spacing:.05em}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:14px 0;border-bottom:1px solid var(--line)}
+.tabs button{background:none;border:0;color:var(--muted);padding:10px 14px;cursor:pointer;font-family:inherit;font-size:14px;border-bottom:2px solid transparent}
+.tabs button.on{color:var(--gold-l);border-bottom-color:var(--gold)}
+.tab{display:none}.tab.on{display:block}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.stat{background:#0E0D11;border:1px solid var(--line);border-radius:4px;padding:14px}
+.stat .k{color:var(--muted);font-size:12px}.stat .v{font-size:26px;color:var(--gold-l);font-family:'Cormorant Garamond',serif;font-weight:600}
+.stat .s{font-size:12px;color:var(--dim)}
+.bar{height:6px;background:#1E1C24;border-radius:3px;margin-top:8px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-d),var(--gold-l))}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+input,select,textarea{width:100%;background:#0E0D11;border:1px solid var(--line);color:var(--ink);font-family:inherit;font-size:14px;padding:9px 10px;border-radius:3px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--gold)}
+textarea{min-height:120px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.btn{background:linear-gradient(180deg,#D8B85A,#A8862E);color:#140F02;border:0;padding:9px 16px;border-radius:3px;font-family:inherit;font-weight:500;cursor:pointer;font-size:13px}
+.btn.ghost{background:transparent;color:var(--gold-l);border:1px solid var(--gold-d)}
+.btn.danger{background:transparent;color:var(--red);border:1px solid var(--red)}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn[disabled]{opacity:.4}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;white-space:nowrap}
+th{color:var(--gold);font-weight:500;position:sticky;top:0;background:var(--panel)}
+tr.won td{background:rgba(201,166,70,.05)}
+tr.used td{color:var(--dim)}
+.tbl{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:4px}
+.pill{display:inline-block;padding:1px 7px;border-radius:2px;font-size:11px;border:1px solid}
+.pill.open{color:var(--gold-l);border-color:var(--gold)}.pill.closed,.pill.before,.pill.disabled{color:var(--dim);border-color:var(--line)}
+.pill.win{color:#1a1400;background:var(--gold);border-color:var(--gold)}
+.pill.used{color:var(--dim);border-color:var(--dim)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1C1A20;border:1px solid var(--gold-d);padding:10px 16px;border-radius:3px;opacity:0;transition:.3s;z-index:9;pointer-events:none}
+.toast.show{opacity:1}
+.login{max-width:360px;margin:20vh auto;text-align:center}
+.switch{display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 0}
+.switch input{width:auto;accent-color:var(--gold);width:18px;height:18px}
+.hint{font-size:12px;color:var(--dim);margin-top:6px}
+.testbox{border:1px dashed var(--red);padding:12px;border-radius:4px;margin-top:12px}
+code{background:#0E0D11;padding:1px 5px;border-radius:2px;color:var(--gold-l);font-size:12px}
+.chk{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.chk label{display:flex;align-items:center;gap:6px;margin:0;color:var(--ink)}
+.chk input{width:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div id="loginView" class="login">
+  <h1>Chef's Table · Admin</h1>
+  <p style="color:var(--muted);margin:10px 0 20px">관리자 비밀번호를 입력하세요</p>
+  <input type="password" id="pw" placeholder="비밀번호" style="text-align:center">
+  <button class="btn" style="width:100%;margin-top:10px" onclick="login()">로그인</button>
+  <p class="hint" id="loginErr"></p>
+</div>
+
+<div id="adminView" style="display:none">
+  <div class="top">
+    <div><h1>Chef's Table · Admin</h1><div class="hint" id="nowLine"></div></div>
+    <div class="actions" style="margin:0">
+      <span id="testBadge" class="pill" style="display:none;color:var(--red);border-color:var(--red)">TEST MODE ON</span>
+      <button class="btn ghost sm" onclick="refresh()">새로고침</button>
+      <button class="btn ghost sm" onclick="logout()">로그아웃</button>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="on" data-tab="dash">현황</button><button data-tab="sess">회차 설정</button><button data-tab="entries">응모·당첨자</button><button data-tab="survey">설문 편집</button><button data-tab="set">기본 설정</button>
+  </div>
+
+  <div class="tab on" id="tab-dash">
+    <div id="dash"></div>
+  </div>
+
+  <div class="tab" id="tab-sess">
+    <p class="hint">시간은 한국시간(KST) 기준. 마감(close_at)은 사회자 멘트 10분 전으로 설정되어 있고, 마감 전 "막판 전원당첨" 분(기본 설정 탭)이 적용됩니다. 강제 상태를 "자동"이 아닌 값으로 두면 시간과 무관하게 열리거나 닫힙니다.</p>
+    <div id="sessForms"></div>
+  </div>
+
+  <div class="tab" id="tab-entries">
+    <div class="panel">
+      <div class="chk">
+        <label>회차 <select id="fSession" style="width:auto;display:inline-block"><option value="">전체</option></select></label>
+        <label><input type="checkbox" id="fWon" checked> 당첨자만</label>
+        <label><input type="checkbox" id="fTest"> 테스트 데이터 보기</label>
+        <label><input type="checkbox" id="fSms"> 문자수신 동의자만</label>
+        <button class="btn sm" onclick="loadEntries()">조회</button>
+      </div>
+      <div class="actions">
+        <button class="btn ghost sm" onclick="copyPhones()">전화번호 복사 (문자 발송용)</button>
+        <button class="btn ghost sm" onclick="downloadCSV()">CSV 다운로드 (전체 응답)</button>
+        <span class="hint" id="entryCount"></span>
+      </div>
+    </div>
+    <div class="tbl"><table id="entryTable"><thead><tr><th>#</th><th>회차</th><th>No.</th><th>코드</th><th>이름</th><th>전화</th><th>지역</th><th>성별</th><th>연령</th><th>문자동의</th><th>결과</th><th>확률</th><th>사용</th><th>응모시각</th><th>메모</th><th>작업</th></tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <div class="tab" id="tab-survey">
+    <div class="panel">
+      <h2>추가 설문 문항 (JSON)</h2>
+      <p class="hint">이름·휴대폰·지역·성별·연령대·동의는 고정 항목이고, 아래는 추가 문항입니다. 형식: <code>key</code>(영문, 고유) · <code>label</code>(질문) · <code>type</code>: radio / checkbox / select / scale / text · <code>options</code>(배열) · <code>required</code>(true/false) · scale은 <code>min,max,minLabel,maxLabel</code>.</p>
+      <textarea id="surveyJson" style="min-height:360px"></textarea>
+      <div class="actions"><button class="btn" onclick="saveSurvey()">설문 저장</button><button class="btn ghost" onclick="formatSurvey()">JSON 정리</button><span class="hint" id="surveyMsg"></span></div>
+    </div>
+  </div>
+
+  <div class="tab" id="tab-set">
+    <div class="panel">
+      <h2>행사 표시 정보</h2>
+      <div class="row">
+        <div><label>행사명</label><input id="s_event_name"></div>
+        <div><label>프로그램명</label><input id="s_program_name"></div>
+        <div><label>셰프명</label><input id="s_chef_name"></div>
+      </div>
+      <label>태그라인</label><input id="s_tagline">
+      <label>안내 문구</label><input id="s_notice">
+    </div>
+    <div class="panel">
+      <h2>추첨 방식</h2>
+      <div class="row">
+        <div><label>기본 당첨 확률 (오픈 직후, 0~1)</label><input id="s_base_prob" type="number" step="0.01" min="0" max="1"></div>
+        <div><label>막판 전원당첨 — 마감 N분 전부터 100%</label><input id="s_final_rush_minutes" type="number" min="0"></div>
+      </div>
+      <p class="hint">확률은 오픈→마감 사이 시간 경과에 따라 자동 상승하고, 목표 페이스(정원×경과비율)보다 당첨이 적으면 가산, 너무 앞서면 감속합니다. 정원이 모두 소진되면 자동 매진. 테스트모드는 항상 50%.</p>
+    </div>
+    <div class="panel">
+      <h2>보안</h2>
+      <div class="row">
+        <div><label>스탭 PIN (사용완료 처리)</label><input id="s_staff_pin" inputmode="numeric" maxlength="6"></div>
+        <div><label>관리자 비밀번호 변경 (비우면 유지)</label><input id="s_admin_password" type="password" placeholder="새 비밀번호"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>테스트 모드</h2>
+      <label class="switch"><input type="checkbox" id="s_test_mode"> 전체 테스트모드 켜기 (모든 참가자 화면이 테스트로 동작 — 시간 제한 무시, 데이터 분리, 확률 50%)</label>
+      <p class="hint">전체 모드를 끄더라도 <code>index.html?test=1</code> 주소로 접속하면 그 기기만 테스트로 동작합니다. 행사 전 사전 점검은 이 주소를 쓰세요.</p>
+      <div class="testbox">
+        <div id="testCounts" class="hint"></div>
+        <div class="actions"><button class="btn danger sm" onclick="deleteTest()">테스트 데이터 전체 삭제</button></div>
+      </div>
+    </div>
+    <div class="actions"><button class="btn" onclick="saveSettings()">설정 저장</button><span class="hint" id="setMsg"></span></div>
+  </div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const CFG=window.CHEF_CONFIG; const sb=supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_KEY);
+const $=s=>document.querySelector(s); let PW=sessionStorage.getItem('chef_admin_pw')||''; let OV=null; let ROWS=[];
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2500);}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function kst(iso){if(!iso)return '';return new Date(iso).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});}
+function toLocalInput(iso){ if(!iso) return ''; const d=new Date(iso); const k=new Date(d.getTime()+9*3600*1000); return k.toISOString().slice(0,16); }
+function fromLocalInput(v){ return v ? v+':00+09:00' : null; }
+async function api(action,payload={}){const {data,error}=await sb.rpc('chef_admin',{p_pw:PW,p_action:action,p_payload:payload}); if(error) throw error; if(!data.ok) throw new Error(data.error||'실패'); return data;}
+
+async function login(){ PW=$('#pw').value; try{ await api('login'); sessionStorage.setItem('chef_admin_pw',PW); show(); }catch(e){ $('#loginErr').textContent=e.message; } }
+function logout(){ sessionStorage.removeItem('chef_admin_pw'); location.reload(); }
+async function show(){ $('#loginView').style.display='none'; $('#adminView').style.display='block'; await refresh(); }
+$('#pw').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('#tab-'+b.dataset.tab).classList.add('on'); if(b.dataset.tab==='entries'&&!ROWS.length) loadEntries();});
+
+async function refresh(){
+  OV=await api('overview',{test:false});
+  $('#nowLine').textContent='서버 시각 '+kst(OV.now)+' (KST)';
+  $('#testBadge').style.display=OV.settings.test_mode?'inline-block':'none';
+  renderDash(); renderSessForms(); fillSettings();
+  $('#fSession').innerHTML='<option value="">전체</option>'+OV.sessions.map(s=>`<option value="${s.id}">${s.day_label} ${s.round_label}</option>`).join('');
+  $('#testCounts').textContent=`테스트 응모 ${OV.test_counts.entries}건 / 테스트 당첨 ${OV.test_counts.won}건`;
+}
+function renderDash(){
+  $('#dash').innerHTML=OV.sessions.map(s=>`<div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">${esc(s.date_label)} ${esc(s.day_label)} ${esc(s.round_label)} <span class="pill ${s.status}">${{open:'응모 중',before:'오픈 전',closed:'마감',disabled:'미운영'}[s.status]}</span>${s.override!=='auto'?' <span class="pill" style="color:var(--red);border-color:var(--red)">강제 '+s.override+'</span>':''}</h2>
+      <span class="hint">응모 ${kst(s.open_at)} ~ ${kst(s.close_at)} · 멘트 ${s.host_time} · 시식 ${s.tasting_time}</span>
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <div class="stat"><div class="k">당첨 / 정원</div><div class="v">${s.won} / ${s.capacity}</div><div class="bar"><i style="width:${Math.min(100,s.won/s.capacity*100)}%"></i></div><div class="s">남은 시식권 ${s.remaining}</div></div>
+      <div class="stat"><div class="k">총 응모</div><div class="v">${s.entries}</div><div class="s">낙첨 ${s.entries-s.won}</div></div>
+      <div class="stat"><div class="k">시식 완료</div><div class="v">${s.used}</div><div class="s">미사용 ${s.won-s.used}</div></div>
+      <div class="stat"><div class="k">현재 당첨 확률</div><div class="v">${Math.round(s.prob_now*100)}%</div><div class="s">${s.status==='open'?'실시간 자동 조정 중':'—'}</div></div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost sm" onclick="setOverride('${s.id}','open')">강제 오픈</button>
+      <button class="btn ghost sm" onclick="setOverride('${s.id}','closed')">강제 마감</button>
+      <button class="btn ghost sm" onclick="setOverride('${s.id}','auto')">자동(시간)</button>
+      <button class="btn ghost sm" onclick="quickCap('${s.id}',${s.capacity})">정원 변경</button>
+    </div></div>`).join('');
+}
+async function setOverride(id,ov){ await api('save_session',{id,override:ov}); toast('적용됨'); refresh(); }
+async function quickCap(id,cur){ const v=prompt('정원(시식권 수) 입력',cur); if(v===null) return; const n=parseInt(v); if(!(n>=0)) return toast('숫자를 입력하세요'); await api('save_session',{id,capacity:n}); toast('정원 변경됨'); refresh(); }
+function renderSessForms(){
+  $('#sessForms').innerHTML=OV.sessions.map(s=>`<div class="panel" data-id="${s.id}">
+    <h2>${esc(s.id)} · ${esc(s.day_label)} ${esc(s.round_label)}</h2>
+    <div class="row">
+      <div><label>요일 표시</label><input data-f="day_label" value="${esc(s.day_label)}"></div>
+      <div><label>회차 표시</label><input data-f="round_label" value="${esc(s.round_label)}"></div>
+      <div><label>날짜 표시</label><input data-f="date_label" value="${esc(s.date_label)}"></div>
+      <div><label>사회자 멘트 시작</label><input data-f="host_time" value="${esc(s.host_time)}"></div>
+      <div><label>시식 시간</label><input data-f="tasting_time" value="${esc(s.tasting_time)}"></div>
+      <div><label>정원(시식권 수)</label><input data-f="capacity" type="number" value="${s.capacity}"></div>
+      <div><label>응모 오픈 (KST)</label><input data-f="open_at" type="datetime-local" value="${toLocalInput(s.open_at)}"></div>
+      <div><label>응모 마감 (KST, 멘트 10분 전)</label><input data-f="close_at" type="datetime-local" value="${toLocalInput(s.close_at)}"></div>
+      <div><label>강제 상태</label><select data-f="override"><option value="auto" ${s.override==='auto'?'selected':''}>자동(시간)</option><option value="open" ${s.override==='open'?'selected':''}>강제 오픈</option><option value="closed" ${s.override==='closed'?'selected':''}>강제 마감</option></select></div>
+      <div><label>운영 여부</label><select data-f="enabled"><option value="true" ${s.enabled?'selected':''}>운영</option><option value="false" ${!s.enabled?'selected':''}>미운영(숨김)</option></select></div>
+    </div>
+    <div class="actions"><button class="btn sm" onclick="saveSess('${s.id}')">저장</button><button class="btn danger sm" onclick="resetSess('${s.id}')">이 회차 응모 데이터 초기화</button></div>
+  </div>`).join('');
+}
+async function saveSess(id){
+  const p={id}; document.querySelectorAll(`.panel[data-id="${id}"] [data-f]`).forEach(el=>{ let v=el.value; const f=el.dataset.f; if(f==='open_at'||f==='close_at') v=fromLocalInput(v); if(f==='capacity') v=parseInt(v); if(f==='enabled') v=v==='true'; p[f]=v; });
+  await api('save_session',p); toast('회차 저장됨'); refresh();
+}
+async function resetSess(id){ if(!confirm(`[${id}] 회차의 실제 응모·당첨 데이터를 모두 삭제합니다. 되돌릴 수 없습니다. 진행할까요?`)) return; if(prompt('확인을 위해 "삭제"를 입력하세요')!=='삭제') return; await api('reset_session',{session_id:id}); toast('초기화됨'); refresh(); }
+
+function fillSettings(){ const s=OV.settings; ['event_name','program_name','chef_name','tagline','notice','base_prob','final_rush_minutes','staff_pin'].forEach(k=>$('#s_'+k).value=s[k]); $('#s_test_mode').checked=!!s.test_mode; $('#s_admin_password').value=''; $('#surveyJson').value=JSON.stringify(s.survey,null,2); }
+async function saveSettings(){
+  const p={}; ['event_name','program_name','chef_name','tagline','notice','staff_pin','admin_password'].forEach(k=>p[k]=$('#s_'+k).value);
+  p.base_prob=parseFloat($('#s_base_prob').value); p.final_rush_minutes=parseInt($('#s_final_rush_minutes').value); p.test_mode=$('#s_test_mode').checked;
+  if(!/^\d{4,6}$/.test(p.staff_pin)) return toast('스탭 PIN은 숫자 4~6자리');
+  await api('save_settings',p); if(p.admin_password){ PW=p.admin_password; sessionStorage.setItem('chef_admin_pw',PW);} toast('설정 저장됨'); refresh();
+}
+function formatSurvey(){ try{ $('#surveyJson').value=JSON.stringify(JSON.parse($('#surveyJson').value),null,2); $('#surveyMsg').textContent='정리됨'; }catch(e){ $('#surveyMsg').textContent='JSON 오류: '+e.message; } }
+async function saveSurvey(){ let j; try{ j=JSON.parse($('#surveyJson').value); if(!Array.isArray(j)) throw new Error('배열이어야 합니다'); const keys=new Set(); for(const q of j){ if(!q.key||!q.label||!q.type) throw new Error('key/label/type 필수: '+JSON.stringify(q)); if(keys.has(q.key)) throw new Error('key 중복: '+q.key); keys.add(q.key);} }catch(e){ $('#surveyMsg').textContent='JSON 오류: '+e.message; return; } await api('save_settings',{survey:j}); $('#surveyMsg').textContent='저장됨'; toast('설문 저장됨'); }
+async function deleteTest(){ if(!confirm('테스트 데이터를 모두 삭제할까요?')) return; await api('delete_test'); toast('테스트 데이터 삭제됨'); refresh(); }
+
+async function loadEntries(){
+  const r=await api('entries',{session_id:$('#fSession').value,won_only:$('#fWon').checked,test:$('#fTest').checked});
+  ROWS=r.rows; if($('#fSms').checked) ROWS=ROWS.filter(x=>x.answers&&x.answers._sms);
+  $('#entryCount').textContent=`${ROWS.length}건`;
+  $('#entryTable tbody').innerHTML=ROWS.map((e,i)=>`<tr class="${e.won?'won':''} ${e.used_at?'used':''}">
+    <td>${i+1}</td><td>${esc(e.day_label)} ${esc(e.round_label)}</td><td>${e.ticket_no??''}</td><td>${esc(e.ticket_code??'')}</td>
+    <td>${esc(e.name)}</td><td>${esc(fmtPhone(e.phone))}</td><td>${esc(e.region)}</td><td>${esc(e.gender)}</td><td>${esc(e.age_group)}</td>
+    <td>${e.answers&&e.answers._sms?'O':''}</td>
+    <td>${e.won?'<span class="pill win">당첨</span>':'낙첨'}</td><td>${e.prob!=null?Math.round(e.prob*100)+'%':''}</td>
+    <td>${e.used_at?'<span class="pill used">'+kst(e.used_at)+'</span>':''}</td><td>${kst(e.created_at)}</td>
+    <td>${esc(e.note||'')}</td>
+    <td>${e.won?(e.used_at?`<button class="btn ghost sm" onclick="setUsed(${e.id},false)">사용취소</button>`:`<button class="btn ghost sm" onclick="setUsed(${e.id},true)">사용처리</button>`):`<button class="btn ghost sm" onclick="forceWin(${e.id})">당첨전환</button>`}
+      <button class="btn ghost sm" onclick="setNote(${e.id},'${esc(e.note||'').replace(/'/g,'&#39;')}')">메모</button>
+      <button class="btn danger sm" onclick="delEntry(${e.id})">삭제</button></td></tr>`).join('');
+}
+function fmtPhone(p){p=(p||'').replace(/\D/g,'');return p.length===11?p.replace(/(\d{3})(\d{4})(\d{4})/,'$1-$2-$3'):p.length===10?p.replace(/(\d{3})(\d{3})(\d{4})/,'$1-$2-$3'):p;}
+async function setUsed(id,used){ await api('set_used',{id,used}); loadEntries(); refresh(); }
+async function forceWin(id){ if(!confirm('이 응모자를 당첨으로 전환합니다(현장 보정용). 진행할까요?')) return; await api('force_win',{id}); toast('당첨 전환됨'); loadEntries(); refresh(); }
+async function setNote(id,cur){ const v=prompt('메모',cur); if(v===null) return; await api('set_note',{id,note:v}); loadEntries(); }
+async function delEntry(id){ if(!confirm('이 응모 기록을 삭제할까요? (해당 기기·번호는 다시 응모 가능해집니다)')) return; await api('delete_entry',{id}); loadEntries(); refresh(); }
+function copyPhones(){ const list=[...new Set(ROWS.map(e=>fmtPhone(e.phone)))]; if(!list.length) return toast('먼저 조회하세요'); navigator.clipboard.writeText(list.join('\n')).then(()=>toast(`전화번호 ${list.length}개 복사됨 (줄바꿈 구분)`)); }
+function downloadCSV(){
+  if(!ROWS.length) return toast('먼저 조회하세요');
+  const qkeys=[...new Set(ROWS.flatMap(e=>Object.keys(e.answers||{})))].filter(k=>k!=='_sms');
+  const head=['회차','티켓번호','코드','이름','전화','지역','성별','연령','문자동의','결과','확률','사용시각','응모시각','메모',...qkeys];
+  const lines=[head.join(',')];
+  for(const e of ROWS){ const a=e.answers||{}; const row=[e.day_label+' '+e.round_label,e.ticket_no??'',e.ticket_code??'',e.name,fmtPhone(e.phone),e.region,e.gender,e.age_group,a._sms?'O':'',e.won?'당첨':'낙첨',e.prob!=null?Math.round(e.prob*100)+'%':'',kst(e.used_at),kst(e.created_at),e.note||'',...qkeys.map(k=>Array.isArray(a[k])?a[k].join('|'):(a[k]??''))];
+    lines.push(row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')); }
+  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}); const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download='chef_table_'+($('#fSession').value||'all')+'_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(u);
+}
+if(PW){ api('login').then(show).catch(()=>{}); }
+setInterval(()=>{ if($('#adminView').style.display!=='none' && $('#tab-dash').classList.contains('on')) refresh().catch(()=>{}); },20000);
+</script>
+</body>
+</html>
