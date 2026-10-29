@@ -94,6 +94,14 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.2
 .consent input{width:18px;height:18px;accent-color:var(--gold);margin-top:2px;flex:none}
 .err{color:#E08C8C;font-family:var(--sans);font-size:13px;margin-top:8px;display:none}
 
+.field input[type=number]{width:100%;background:#0E0D11;border:1px solid var(--line);border-bottom-color:var(--gold-d);color:var(--ink);font-family:var(--sans);font-size:16px;padding:13px 12px;border-radius:2px;outline:none}
+.field textarea{resize:vertical;line-height:1.5}
+.mx-group{font-family:var(--latin);color:var(--gold);letter-spacing:.2em;font-size:11px;text-transform:uppercase;margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.mx-row{padding:10px 0;border-bottom:1px dashed rgba(42,39,34,.8)}
+.mx-lbl{font-family:var(--sans);font-size:14px;color:var(--ink);margin-bottom:8px;line-height:1.4}
+.mx-opts{display:flex;gap:6px}
+.mx-opts .chip{flex:1}.mx-opts .chip span{display:block;text-align:center;padding:10px 0;font-size:14px}
+.mx-opts .chip span.na{font-size:11px;letter-spacing:0;color:var(--dim)}
 /* wheel */
 .wheel-wrap{position:relative;width:min(320px,86vw);margin:26px auto 10px}
 .wheel-wrap canvas{width:100%;height:auto;display:block;border-radius:50%;box-shadow:0 0 0 6px #0B0B0D,0 0 0 8px var(--gold-d),0 0 60px rgba(201,166,70,.25)}
@@ -188,16 +196,10 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.2
       <div class="field"><label class="lbl">휴대폰<span class="req">*</span></label><input type="tel" name="phone" autocomplete="tel" placeholder="010-0000-0000" inputmode="numeric" required></div>
     </div>
     <div class="field"><label class="lbl">거주 지역<span class="req">*</span></label>
-      <div class="row2">
-        <select name="sido" required>
-          <option value="">시/도 선택</option>
-          <option>경남 밀양시</option><option>경남(밀양 외)</option><option>부산</option><option>울산</option><option>대구</option><option>경북</option><option>서울</option><option>경기</option><option>인천</option><option>대전</option><option>세종</option><option>충남</option><option>충북</option><option>광주</option><option>전남</option><option>전북</option><option>강원</option><option>제주</option><option>해외</option>
-        </select>
-        <input type="text" name="sigungu" placeholder="시/군/구 (선택)">
-      </div>
+      <div class="chips" id="regionChips"></div>
     </div>
     <div class="field"><label class="lbl">성별<span class="req">*</span></label>
-      <div class="chips"><label class="chip"><input type="radio" name="gender" value="여성" required><span>여성</span></label><label class="chip"><input type="radio" name="gender" value="남성"><span>남성</span></label><label class="chip"><input type="radio" name="gender" value="기타/응답거부"><span>기타</span></label></div>
+      <div class="chips"><label class="chip"><input type="radio" name="gender" value="남" required><span>남</span></label><label class="chip"><input type="radio" name="gender" value="여"><span>여</span></label></div>
     </div>
     <div class="field"><label class="lbl">연령대<span class="req">*</span></label>
       <div class="chips" id="ageChips"></div>
@@ -330,11 +332,13 @@ function renderMine(){
 }
 
 // ---------- 설문 ----------
-const AGES = ['10대','20대','30대','40대','50대','60대 이상'];
+const AGES = ['10대 이하','20대','30대','40대','50대','60대 이상'];
+const REGIONS = ['밀양시(관내)','경상남도(밀양시 제외)','부산광역시','대구광역시','울산광역시','그 외 국내지역'];
 function startSurvey(s){
   CUR_SESSION = s;
   $('#s-session').textContent = `${s.date_label} ${s.day_label} ${s.round_label} · 시식 ${s.tasting_time}`;
   $('#ageChips').innerHTML = AGES.map((a,i)=>`<label class="chip"><input type="radio" name="age" value="${a}" ${i===0?'required':''}><span>${a}</span></label>`).join('');
+  $('#regionChips').innerHTML = REGIONS.map(a=>`<label class="chip"><input type="radio" name="sido" value="${a}"><span>${a}</span></label>`).join('');
   renderExtra();
   const f = $('#surveyForm');
   const saved = JSON.parse(localStorage.getItem('chef_guest')||'{}');
@@ -351,6 +355,21 @@ function renderExtra(){
     const nm = 'q_'+q.key;
     if(q.type==='radio' || q.type==='checkbox'){
       body = '<div class="chips">'+(q.options||[]).map(o=>`<label class="chip"><input type="${q.type}" name="${nm}" value="${esc(o)}"><span>${esc(o)}</span></label>`).join('')+'</div>';
+      if(q.other) body += `<input type="text" name="${nm}_etc" class="etc" placeholder="기타 내용을 적어 주세요" style="margin-top:8px;display:none">`;
+    } else if(q.type==='numbers'){
+      body = '<div class="row2">'+(q.fields||[]).map(f=>`<div><div class="scale-lbl" style="margin:0 0 4px">${esc(f.label)}</div><div style="display:flex;align-items:center;gap:6px"><input type="number" name="${nm}_${f.key}" min="${f.min??0}" inputmode="numeric" placeholder="0" style="flex:1"><span class="sub">${esc(f.unit||'')}</span></div></div>`).join('')+'</div>';
+    } else if(q.type==='matrix'){
+      const cols = q.cols||[]; const na = q.na;
+      body = '<div class="mx">'+(q.rows||[]).map(r=>{
+        const rn = nm+'_'+r.key;
+        return (r.group?`<div class="mx-group">${esc(r.group)}</div>`:'')+
+        `<div class="mx-row"><div class="mx-lbl">${esc(r.label)}</div><div class="mx-opts">`+
+        (na?`<label class="chip"><input type="radio" name="${rn}" value="0"><span class="na">${esc(na)}</span></label>`:'')+
+        cols.map((c,i)=>`<label class="chip" title="${esc(c)}"><input type="radio" name="${rn}" value="${i+1}"><span>${i+1}</span></label>`).join('')+
+        `</div></div>`; }).join('')+
+        `<div class="scale-lbl"><span>1 = ${esc(cols[0]||'')}</span><span>${cols.length} = ${esc(cols[cols.length-1]||'')}</span></div></div>`;
+    } else if(q.type==='textarea'){
+      body = `<textarea name="${nm}" rows="4" placeholder="${esc(q.placeholder||'')}"></textarea>`;
     } else if(q.type==='select'){
       body = `<select name="${nm}"><option value="">선택</option>${(q.options||[]).map(o=>`<option>${esc(o)}</option>`).join('')}</select>`;
     } else if(q.type==='scale'){
@@ -362,6 +381,7 @@ function renderExtra(){
     }
     d.innerHTML = `<label class="lbl">${esc(q.label)}${req}</label>${body}`;
     wrap.appendChild(d);
+    if(q.other){ d.querySelectorAll(`input[name="${nm}"]`).forEach(i=>i.addEventListener('change',()=>{ const et=d.querySelector('.etc'); const on=[...d.querySelectorAll(`input[name="${nm}"]:checked`)].some(x=>x.value==='기타'); et.style.display=on?'block':'none'; if(on) et.focus(); })); }
   });
 }
 $('#surveyForm').phone.addEventListener('input', e=>{
@@ -383,9 +403,19 @@ $('#surveyForm').addEventListener('submit', async ev=>{
   const answers = {};
   for(const q of (STATE.survey||[])){
     const nm='q_'+q.key;
-    const vals = fd.getAll(nm).filter(Boolean);
+    if(q.type==='numbers'){
+      const o={}; for(const f of (q.fields||[])){ const v=fd.get(nm+'_'+f.key); if(q.required && (v===''||v===null)) return showErr('#surveyErr',`"${q.label}" 항목에 답해 주세요.`); o[f.key]=v===''?null:Number(v); }
+      answers[q.key]=o; continue;
+    }
+    if(q.type==='matrix'){
+      const o={}; for(const r of (q.rows||[])){ const v=fd.get(nm+'_'+r.key); if(q.required && v===null) return showErr('#surveyErr',`"${r.label}" 항목에 답해 주세요.`); o[r.key]=v===null?null:Number(v); }
+      answers[q.key]=o; continue;
+    }
+    const vals = fd.getAll(nm).map(v=>String(v).trim()).filter(Boolean);
     if(q.required && !vals.length) return showErr('#surveyErr',`"${q.label}" 항목에 답해 주세요.`);
-    answers[q.key] = q.type==='checkbox' ? vals : (vals[0]||'');
+    let val = q.type==='checkbox' ? vals : (vals[0]||'');
+    if(q.other && vals.includes('기타')){ const et=(fd.get(nm+'_etc')||'').trim(); if(!et) return showErr('#surveyErr',`"${q.label}" 기타 내용을 적어 주세요.`); val = q.type==='checkbox' ? vals.map(v=>v==='기타'?'기타: '+et:v) : '기타: '+et; }
+    answers[q.key] = val;
   }
   if(!fd.get('consent')) return showErr('#surveyErr','개인정보 수집·이용에 동의해 주세요.');
   answers._sms = !!fd.get('sms');
@@ -393,7 +423,7 @@ $('#surveyForm').addEventListener('submit', async ev=>{
   localStorage.setItem('chef_guest', JSON.stringify({name, phone:f.phone.value}));
   const btn=$('#btnDraw'); btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
   try{
-    const region = fd.get('sido') + ((fd.get('sigungu')||'').trim()? ' '+fd.get('sigungu').trim():'');
+    const region = fd.get('sido');
     const {data, error} = await sb.rpc('chef_draw', {p_device:DEVICE, p_session:CUR_SESSION.id, p_name:name, p_phone:phone,
       p_region:region, p_gender:fd.get('gender'), p_age:fd.get('age'), p_answers:answers, p_test:TEST});
     if(error) throw error;

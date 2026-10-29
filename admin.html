@@ -263,10 +263,11 @@ async function delEntry(id){ if(!confirm('이 응모 기록을 삭제할까요? 
 function copyPhones(){ const list=[...new Set(ROWS.map(e=>fmtPhone(e.phone)))]; if(!list.length) return toast('먼저 조회하세요'); navigator.clipboard.writeText(list.join('\n')).then(()=>toast(`전화번호 ${list.length}개 복사됨 (줄바꿈 구분)`)); }
 function downloadCSV(){
   if(!ROWS.length) return toast('먼저 조회하세요');
-  const qkeys=[...new Set(ROWS.flatMap(e=>Object.keys(e.answers||{})))].filter(k=>k!=='_sms');
+  const flat=e=>{const a=e.answers||{},o={};for(const [k,v] of Object.entries(a)){if(k==='_sms')continue;if(v&&typeof v==='object'&&!Array.isArray(v)){for(const [k2,v2] of Object.entries(v))o[k+'.'+k2]=v2;}else o[k]=v;}return o;};
+  const qkeys=[...new Set(ROWS.flatMap(e=>Object.keys(flat(e))))];
   const head=['회차','티켓번호','코드','이름','전화','지역','성별','연령','문자동의','결과','확률','사용시각','응모시각','메모',...qkeys];
   const lines=[head.join(',')];
-  for(const e of ROWS){ const a=e.answers||{}; const row=[e.day_label+' '+e.round_label,e.ticket_no??'',e.ticket_code??'',e.name,fmtPhone(e.phone),e.region,e.gender,e.age_group,a._sms?'O':'',e.won?'당첨':'낙첨',e.prob!=null?Math.round(e.prob*100)+'%':'',kst(e.used_at),kst(e.created_at),e.note||'',...qkeys.map(k=>Array.isArray(a[k])?a[k].join('|'):(a[k]??''))];
+  for(const e of ROWS){ const a={...flat(e),_sms:(e.answers||{})._sms}; const row=[e.day_label+' '+e.round_label,e.ticket_no??'',e.ticket_code??'',e.name,fmtPhone(e.phone),e.region,e.gender,e.age_group,a._sms?'O':'',e.won?'당첨':'낙첨',e.prob!=null?Math.round(e.prob*100)+'%':'',kst(e.used_at),kst(e.created_at),e.note||'',...qkeys.map(k=>Array.isArray(a[k])?a[k].join('|'):(a[k]??''))];
     lines.push(row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')); }
   const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}); const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download='chef_table_'+($('#fSession').value||'all')+'_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(u);
 }
