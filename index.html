@@ -92,7 +92,13 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.2
 .scale-lbl{display:flex;justify-content:space-between;color:var(--dim);font-size:12px;margin-top:4px;font-family:var(--sans)}
 .consent{display:flex;gap:10px;align-items:flex-start;font-family:var(--sans);font-size:13px;color:var(--muted);margin-top:10px}
 .consent input{width:18px;height:18px;accent-color:var(--gold);margin-top:2px;flex:none}
-.err{color:#E08C8C;font-family:var(--sans);font-size:13px;margin-top:8px;display:none}
+.err{display:none;align-items:flex-start;gap:10px;margin:16px 0 4px;padding:13px 14px;border:1px solid rgba(201,166,70,.7);border-left:3px solid var(--gold);background:linear-gradient(90deg,rgba(201,166,70,.14),rgba(201,166,70,.04));color:#F3E6BE;font-family:var(--sans);font-size:14px;line-height:1.5;border-radius:3px;box-shadow:0 6px 24px rgba(0,0,0,.4)}
+.err-ic{flex:none;width:20px;height:20px;border-radius:50%;background:var(--gold);color:#140F02;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.err.shake{animation:shake .4s ease}
+@keyframes shake{0%,100%{transform:none}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.field.invalid,.mx-row.invalid{position:relative;border-radius:3px;outline:1px solid rgba(201,166,70,.6);outline-offset:8px;background:rgba(201,166,70,.05)}
+.field.invalid .lbl,.mx-row.invalid .mx-lbl{color:#F5E6B0}
+.consent.invalid{outline:1px solid rgba(201,166,70,.6);outline-offset:6px;border-radius:3px}
 
 .field input[type=number]{width:100%;background:#0E0D11;border:1px solid var(--line);border-bottom-color:var(--gold-d);color:var(--ink);font-family:var(--sans);font-size:16px;padding:13px 12px;border-radius:2px;outline:none}
 .field textarea{resize:vertical;line-height:1.5}
@@ -181,6 +187,9 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.2
   <div id="sessions"></div>
   <div id="mine"></div>
   <p class="note" id="h-notice"></p>
+  <div class="rule"><span>Survey</span></div>
+  <button class="btn ghost" onclick="startFeedback()">축제 만족도 설문 참여</button>
+  <p class="note">축제를 관람하신 후 남겨 주시는 소중한 의견입니다 · 통계법 제33조에 따라 비밀이 보장됩니다</p>
   <p class="note">시식권 90석 선착 추첨 · 1인 1매 · 1기기 1회 응모<br>응모는 각 회차 사회자 멘트 10분 전 마감</p>
 </section>
 
@@ -236,6 +245,26 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.2
   <div class="center mt"><button class="link" onclick="go('scr-home');loadMine()">← 처음으로</button></div>
 </section>
 </div>
+
+<!-- 만족도 설문 -->
+<section class="screen" id="scr-feedback">
+  <div class="eyebrow" style="padding-top:28px">Guest Review</div>
+  <h1 class="title" style="font-size:26px">축제 만족도 설문</h1>
+  <p class="sub">『2026 밀양매운맛축제』를 찾아 주셔서 감사합니다.<br>응답은 축제 발전을 위한 자료로만 활용됩니다.</p>
+  <div class="rule"><span>Guest</span></div>
+  <form id="fbForm" novalidate>
+    <div class="row2">
+      <div class="field"><label class="lbl">이름</label><input type="text" name="name" autocomplete="name" placeholder="선택"></div>
+      <div class="field"><label class="lbl">휴대폰<span class="req">*</span></label><input type="tel" name="phone" autocomplete="tel" placeholder="010-0000-0000" inputmode="numeric" required></div>
+    </div>
+    <p class="note" style="text-align:left;margin-top:-6px">※ 중복 응답 방지용이며, 응모 정보와 연결해 통계에만 사용합니다.</p>
+    <div class="rule"><span>Review</span></div>
+    <div id="fbQ"></div>
+    <div class="err" id="fbErr"></div>
+    <button class="btn" type="submit" id="btnFb">설문 제출</button>
+    <div class="center mt"><button type="button" class="link" onclick="go('scr-home')">← 돌아가기</button></div>
+  </form>
+</section>
 
 <!-- 스탭 PIN -->
 <div class="modal" id="pinModal">
@@ -346,9 +375,10 @@ function startSurvey(s){
   $('#surveyErr').style.display='none';
   go('scr-survey');
 }
-function renderExtra(){
-  const wrap = $('#extraQ'); wrap.innerHTML='';
-  (STATE.survey||[]).forEach(q=>{
+function renderExtra(){ renderQuestions($('#extraQ'), STATE.survey||[]); }
+function renderQuestions(wrap, list){
+  wrap.innerHTML='';
+  (list||[]).forEach(q=>{
     const d = document.createElement('div'); d.className='field';
     const req = q.required ? '<span class="req">*</span>' : '';
     let body='';
@@ -357,7 +387,7 @@ function renderExtra(){
       body = '<div class="chips">'+(q.options||[]).map(o=>`<label class="chip"><input type="${q.type}" name="${nm}" value="${esc(o)}"><span>${esc(o)}</span></label>`).join('')+'</div>';
       if(q.other) body += `<input type="text" name="${nm}_etc" class="etc" placeholder="기타 내용을 적어 주세요" style="margin-top:8px;display:none">`;
     } else if(q.type==='numbers'){
-      body = '<div class="row2">'+(q.fields||[]).map(f=>`<div><div class="scale-lbl" style="margin:0 0 4px">${esc(f.label)}</div><div style="display:flex;align-items:center;gap:6px"><input type="number" name="${nm}_${f.key}" min="${f.min??0}" inputmode="numeric" placeholder="0" style="flex:1"><span class="sub">${esc(f.unit||'')}</span></div></div>`).join('')+'</div>';
+      body = '<div class="row2">'+(q.fields||[]).map(f=>`<div><div class="scale-lbl" style="margin:0 0 4px">${esc(f.label)}</div><div style="display:flex;align-items:center;gap:6px"><input type="number" name="${nm}_${f.key}" min="${f.min??0}" value="${f.default??f.min??0}" inputmode="numeric" style="flex:1"><span class="sub">${esc(f.unit||'')}</span></div></div>`).join('')+'</div>';
     } else if(q.type==='matrix'){
       const cols = q.cols||[]; const na = q.na;
       body = '<div class="mx">'+(q.rows||[]).map(r=>{
@@ -389,35 +419,28 @@ $('#surveyForm').phone.addEventListener('input', e=>{
   if(v.length>7) v=v.replace(/(\d{3})(\d{4})(\d+)/,'$1-$2-$3'); else if(v.length>3) v=v.replace(/(\d{3})(\d+)/,'$1-$2');
   e.target.value=v;
 });
-function showErr(id,msg){ const e=$(id); e.textContent=msg; e.style.display='block'; }
+function showErr(id,msg,field){
+  const e=$(id); e.innerHTML=`<span class="err-ic">!</span><span>${esc(msg)}</span>`; e.style.display='flex';
+  e.classList.remove('shake'); void e.offsetWidth; e.classList.add('shake');
+  document.querySelectorAll('.field.invalid').forEach(x=>x.classList.remove('invalid'));
+  let target=e;
+  if(field){ const inp=document.querySelector(`[name="${field}"]`); if(inp){ const box=inp.closest('.mx-row')||inp.closest('.field')||inp.closest('.consent'); if(box){ box.classList.add('invalid'); target=box; } } }
+  setTimeout(()=>target.scrollIntoView({behavior:'smooth',block:'center'}),50);
+}
 
 $('#surveyForm').addEventListener('submit', async ev=>{
   ev.preventDefault();
   const f = ev.target; const fd = new FormData(f);
   const name=(fd.get('name')||'').trim(), phone=(fd.get('phone')||'').replace(/\D/g,'');
-  if(name.length<2) return showErr('#surveyErr','이름을 입력해 주세요.');
-  if(!/^01\d{8,9}$/.test(phone)) return showErr('#surveyErr','휴대폰 번호를 정확히 입력해 주세요.');
-  if(!fd.get('sido')) return showErr('#surveyErr','거주 지역을 선택해 주세요.');
-  if(!fd.get('gender')) return showErr('#surveyErr','성별을 선택해 주세요.');
-  if(!fd.get('age')) return showErr('#surveyErr','연령대를 선택해 주세요.');
-  const answers = {};
-  for(const q of (STATE.survey||[])){
-    const nm='q_'+q.key;
-    if(q.type==='numbers'){
-      const o={}; for(const f of (q.fields||[])){ const v=fd.get(nm+'_'+f.key); if(q.required && (v===''||v===null)) return showErr('#surveyErr',`"${q.label}" 항목에 답해 주세요.`); o[f.key]=v===''?null:Number(v); }
-      answers[q.key]=o; continue;
-    }
-    if(q.type==='matrix'){
-      const o={}; for(const r of (q.rows||[])){ const v=fd.get(nm+'_'+r.key); if(q.required && v===null) return showErr('#surveyErr',`"${r.label}" 항목에 답해 주세요.`); o[r.key]=v===null?null:Number(v); }
-      answers[q.key]=o; continue;
-    }
-    const vals = fd.getAll(nm).map(v=>String(v).trim()).filter(Boolean);
-    if(q.required && !vals.length) return showErr('#surveyErr',`"${q.label}" 항목에 답해 주세요.`);
-    let val = q.type==='checkbox' ? vals : (vals[0]||'');
-    if(q.other && vals.includes('기타')){ const et=(fd.get(nm+'_etc')||'').trim(); if(!et) return showErr('#surveyErr',`"${q.label}" 기타 내용을 적어 주세요.`); val = q.type==='checkbox' ? vals.map(v=>v==='기타'?'기타: '+et:v) : '기타: '+et; }
-    answers[q.key] = val;
-  }
-  if(!fd.get('consent')) return showErr('#surveyErr','개인정보 수집·이용에 동의해 주세요.');
+  if(name.length<2) return showErr('#surveyErr','이름을 입력해 주세요.','name');
+  if(!/^01\d{8,9}$/.test(phone)) return showErr('#surveyErr','휴대폰 번호를 정확히 입력해 주세요.','phone');
+  if(!fd.get('sido')) return showErr('#surveyErr','거주 지역을 선택해 주세요.','sido');
+  if(!fd.get('gender')) return showErr('#surveyErr','성별을 선택해 주세요.','gender');
+  if(!fd.get('age')) return showErr('#surveyErr','연령대를 선택해 주세요.','age');
+  const col = collectAnswers(fd, STATE.survey||[]);
+  if(col.error) return showErr('#surveyErr', col.error, col.field);
+  const answers = col.answers;
+  if(!fd.get('consent')) return showErr('#surveyErr','개인정보 수집·이용에 동의해 주세요.','consent');
   answers._sms = !!fd.get('sms');
   $('#surveyErr').style.display='none';
   localStorage.setItem('chef_guest', JSON.stringify({name, phone:f.phone.value}));
@@ -434,6 +457,27 @@ $('#surveyForm').addEventListener('submit', async ev=>{
   btn.disabled=false; btn.textContent='룰렛 돌리기';
 });
 
+function collectAnswers(fd, list){
+  const answers = {};
+  for(const q of (list||[])){
+    const nm='q_'+q.key;
+    if(q.type==='numbers'){
+      const o={}; for(const f of (q.fields||[])){ let v=fd.get(nm+'_'+f.key); if(v===''||v===null) v=String(f.min??0); const n=Number(v); if(!(n>=(f.min??0))) return {error:(`"${f.label}" 인원은 ${f.min??0}명 이상이어야 합니다.`), field:nm+'_'+f.key}; o[f.key]=n; }
+      answers[q.key]=o; continue;
+    }
+    if(q.type==='matrix'){
+      const o={}; for(const r of (q.rows||[])){ const v=fd.get(nm+'_'+r.key); if(q.required && v===null) return {error:(`"${r.label}" 항목에 답해 주세요.`), field:nm+'_'+r.key}; o[r.key]=v===null?null:Number(v); }
+      answers[q.key]=o; continue;
+    }
+    const vals = fd.getAll(nm).map(v=>String(v).trim()).filter(Boolean);
+    if(q.required && !vals.length) return {error:(`"${q.label}" 항목에 답해 주세요.`), field:nm};
+    let val = q.type==='checkbox' ? vals : (vals[0]||'');
+    if(q.other && vals.includes('기타')){ const et=(fd.get(nm+'_etc')||'').trim(); if(!et) return {error:(`"${q.label}" 기타 내용을 적어 주세요.`), field:nm+'_etc'}; val = q.type==='checkbox' ? vals.map(v=>v==='기타'?'기타: '+et:v) : '기타: '+et; }
+    answers[q.key] = val;
+  }
+  return {answers};
+}
+
 function showOther(d){
   let html='';
   if(d.result==='already'){
@@ -446,6 +490,37 @@ function showOther(d){
   html += `<button class="btn ghost" onclick="go('scr-home');loadMine()">처음으로</button>`;
   $('#resultBody').innerHTML = html; go('scr-result'); loadMine();
 }
+
+// ---------- 만족도 설문 (2단계) ----------
+function startFeedback(){
+  renderQuestions($('#fbQ'), STATE.survey2||[]);
+  const f=$('#fbForm'); const saved=JSON.parse(localStorage.getItem('chef_guest')||'{}');
+  if(saved.name) f.name.value=saved.name; if(saved.phone) f.phone.value=saved.phone;
+  $('#fbErr').style.display='none'; go('scr-feedback');
+}
+$('#fbForm').phone.addEventListener('input', e=>{
+  let v=e.target.value.replace(/\D/g,'').slice(0,11);
+  if(v.length>7) v=v.replace(/(\d{3})(\d{4})(\d+)/,'$1-$2-$3'); else if(v.length>3) v=v.replace(/(\d{3})(\d+)/,'$1-$2');
+  e.target.value=v;
+});
+$('#fbForm').addEventListener('submit', async ev=>{
+  ev.preventDefault();
+  const f=ev.target, fd=new FormData(f);
+  const phone=(fd.get('phone')||'').replace(/\D/g,'');
+  if(!/^01\d{8,9}$/.test(phone)) return showErr('#fbErr','휴대폰 번호를 정확히 입력해 주세요.');
+  const col=collectAnswers(fd, STATE.survey2||[]); if(col.error) return showErr('#fbErr', col.error, col.field);
+  $('#fbErr').style.display='none';
+  const btn=$('#btnFb'); btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
+  try{
+    const {data,error}=await sb.rpc('chef_feedback_submit',{p_device:DEVICE,p_phone:phone,p_name:(fd.get('name')||'').trim(),p_answers:col.answers,p_test:TEST});
+    if(error) throw error;
+    if(data.ok || data.already){ localStorage.setItem('chef_fb_done','1');
+      $('#resultBody').innerHTML=`<div class="result-mark" style="padding-top:40px">✦</div><h2 class="result-h win">${data.ok?'감사합니다':'이미 참여하셨습니다'}</h2><p class="sub mt">${data.ok?'소중한 의견이 축제 발전에 쓰입니다.<br>셰프의 테이블과 함께한 시간이 즐거우셨길 바랍니다.':esc(data.message)}</p><button class="btn ghost" onclick="go('scr-home')">처음으로</button>`;
+      go('scr-result');
+    } else showErr('#fbErr', data.message||'제출에 실패했습니다.');
+  }catch(e){ showErr('#fbErr','오류: '+(e.message||e)); }
+  btn.disabled=false; btn.textContent='설문 제출';
+});
 
 // ---------- 룰렛 ----------
 const SEG = 12, WIN_IDX = [0,3,6,9];
@@ -525,6 +600,7 @@ function showTicket(t){
     <div class="t-status ${used?'used':'ok'}" id="tStatus">${used ? '사용 완료 · '+fmtKST(t.used_at) : '사용 가능 · 시식존에서 스탭에게 보여주세요'}</div>
   </div>
   ${used ? '' : '<button class="btn" onclick="openPin()">스탭 확인 · 사용완료</button><p class="note">시식을 받을 때 스탭이 직접 눌러 처리합니다. 사용 처리 후에는 재사용할 수 없습니다.</p>'}
+  ${used ? '<button class="btn ghost" onclick="startFeedback()">시식은 어떠셨나요? · 만족도 설문</button>' : ''}
   <p class="note">※ 시식 시간 ${esc(t.tasting_time)} 이후 10분 내 미방문 시 시식권은 소멸됩니다.</p>`;
   imgOr($('#ticketBg'), CFG.IMG.ticket);
   go('scr-ticket');
@@ -553,7 +629,7 @@ $('#pinOk').addEventListener('click', async ()=>{
     const lg=new Image(); lg.onload=()=>{ const l=$('#logoImg'); l.src=CFG.IMG.logo; l.style.display='block'; }; lg.src=CFG.IMG.logo;
     const md=new Image(); md.onload=()=>{ $('#hub').innerHTML=`<img src="${CFG.IMG.medal}" alt="">`; }; md.src=CFG.IMG.medal;
     await loadState(); await loadMine();
-    go('scr-home');
+    if(qs.get('fb')==='1') startFeedback(); else go('scr-home');
     setInterval(async()=>{ if($('#scr-home').classList.contains('active')){ try{ await loadState(); renderMine(); }catch(e){} } }, 30000);
   }catch(e){
     console.error(e);
