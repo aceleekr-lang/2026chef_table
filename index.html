@@ -188,18 +188,18 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.2
   <p class="note" id="profileNote" style="display:none"></p>
   <div id="mine"></div>
   <p class="note" id="h-notice"></p>
-  <div class="rule"><span>Survey</span></div>
+  <div id="fbEntry" style="display:none"><div class="rule"><span>Survey</span></div>
   <button class="btn ghost" onclick="startFeedback()">축제 만족도 설문 참여</button>
-  <p class="note">축제를 관람하신 후 남겨 주시는 소중한 의견입니다 · 통계법 제33조에 따라 비밀이 보장됩니다</p>
+  <p class="note">축제를 관람하신 후 남겨 주시는 소중한 의견입니다 · 통계법 제33조에 따라 비밀이 보장됩니다</p></div>
   <p class="note">시식권 90석 선착 추첨 · 1인 1매 · 1기기 1회 응모<br>응모는 각 회차 사회자 멘트 10분 전 마감</p>
 </section>
 
 <!-- 설문 -->
 <section class="screen" id="scr-survey">
   <div class="eyebrow" style="padding-top:28px">Reservation</div>
-  <h1 class="title" style="font-size:26px">간단한 설문 후<br>룰렛에 도전하세요</h1>
+  <h1 class="title" style="font-size:26px">설문 참여 후<br>룰렛에 도전하세요</h1>
   <p class="sub" id="s-session"></p>
-  <p class="note">설문은 1인 1회입니다. 제출 후 같은 날 다른 회차에 도전할 때는 다시 작성하지 않습니다.</p>
+  <p class="note">『2026 밀양매운맛축제』 설문은 1인 1회이며, 통계법 제33조에 따라 비밀이 보장됩니다.<br>제출 후 다른 회차에 도전할 때는 다시 작성하지 않습니다.</p>
   <div class="rule"><span>Guest</span></div>
   <form id="surveyForm" novalidate>
     <div class="row2">
@@ -317,6 +317,7 @@ async function loadState(){
   $('#h-chef').textContent = 'with ' + STATE.chef_name;
   $('#h-tagline').textContent = STATE.tagline;
   $('#h-notice').textContent = STATE.notice;
+  $('#fbEntry').style.display = (STATE.survey2&&STATE.survey2.length) ? 'block' : 'none';
   document.title = STATE.program_name + ' — 시식권 추첨';
   renderSessions();
 }
@@ -625,7 +626,7 @@ function showTicket(t){
     <div class="t-status ${used?'used':'ok'}" id="tStatus">${used ? '사용 완료 · '+fmtKST(t.used_at) : '사용 가능 · 시식존에서 스탭에게 보여주세요'}</div>
   </div>
   ${used ? '' : '<button class="btn" onclick="openPin()">스탭 확인 · 사용완료</button><p class="note">시식을 받을 때 스탭이 직접 눌러 처리합니다. 사용 처리 후에는 재사용할 수 없습니다.</p>'}
-  ${used ? '<button class="btn ghost" onclick="startFeedback()">시식은 어떠셨나요? · 만족도 설문</button>' : ''}
+  ${(used && STATE.survey2 && STATE.survey2.length) ? '<button class="btn ghost" onclick="startFeedback()">시식은 어떠셨나요? · 만족도 설문</button>' : ''}
   <p class="note">※ 시식 시간 ${esc(t.tasting_time)} 이후 10분 내 미방문 시 시식권은 소멸됩니다.</p>`;
   imgOr($('#ticketBg'), CFG.IMG.ticket);
   go('scr-ticket');
