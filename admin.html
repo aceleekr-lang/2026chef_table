@@ -80,7 +80,7 @@ code{background:#0E0D11;padding:1px 5px;border-radius:2px;color:var(--gold-l);fo
     </div>
   </div>
   <div class="tabs">
-    <button class="on" data-tab="dash">현황</button><button data-tab="sess">회차 설정</button><button data-tab="entries">응모·당첨자</button><button data-tab="survey">설문 편집</button><button data-tab="set">기본 설정</button>
+    <button class="on" data-tab="dash">현황</button><button data-tab="sess">회차 설정</button><button data-tab="entries">응모·당첨자</button><button data-tab="feedback">만족도 설문</button><button data-tab="survey">설문 편집</button><button data-tab="set">기본 설정</button>
   </div>
 
   <div class="tab on" id="tab-dash">
@@ -110,12 +110,31 @@ code{background:#0E0D11;padding:1px 5px;border-radius:2px;color:var(--gold-l);fo
     <div class="tbl"><table id="entryTable"><thead><tr><th>#</th><th>회차</th><th>No.</th><th>코드</th><th>이름</th><th>전화</th><th>지역</th><th>성별</th><th>연령</th><th>문자동의</th><th>결과</th><th>확률</th><th>사용</th><th>응모시각</th><th>메모</th><th>작업</th></tr></thead><tbody></tbody></table></div>
   </div>
 
+  <div class="tab" id="tab-feedback">
+    <div class="panel">
+      <div class="chk">
+        <label><input type="checkbox" id="fbTest"> 테스트 데이터 보기</label>
+        <button class="btn sm" onclick="loadFeedback()">조회</button>
+        <button class="btn ghost sm" onclick="downloadFbCSV()">CSV 다운로드</button>
+        <span class="hint" id="fbCount"></span>
+      </div>
+      <p class="hint">만족도 설문 링크(문자 발송용): <code id="fbLink"></code> — 참가자 페이지 홈 버튼·시식권 사용완료 화면에서도 들어올 수 있습니다. 응모 정보(회차·당첨·지역 등)는 전화번호로 자동 연결됩니다.</p>
+    </div>
+    <div class="tbl"><table id="fbTable"><thead><tr><th>#</th><th>제출시각</th><th>이름</th><th>전화</th><th>응모회차</th><th>당첨</th><th>만족도 평균</th><th>셰프의테이블</th><th>자유의견</th><th>작업</th></tr></thead><tbody></tbody></table></div>
+  </div>
+
   <div class="tab" id="tab-survey">
     <div class="panel">
-      <h2>추가 설문 문항 (JSON)</h2>
+      <h2>1단계 · 응모 전 설문 (JSON)</h2>
       <p class="hint">이름·휴대폰·지역·성별·연령대·동의는 고정 항목이고, 아래는 추가 문항입니다. 형식: <code>key</code>(영문, 고유) · <code>label</code>(질문) · <code>type</code>: radio / checkbox / select / scale / text · <code>options</code>(배열) · <code>required</code>(true/false) · scale은 <code>min,max,minLabel,maxLabel</code>.</p>
       <textarea id="surveyJson" style="min-height:360px"></textarea>
-      <div class="actions"><button class="btn" onclick="saveSurvey()">설문 저장</button><button class="btn ghost" onclick="formatSurvey()">JSON 정리</button><span class="hint" id="surveyMsg"></span></div>
+      <div class="actions"><button class="btn" onclick="saveSurvey('survey')">1단계 저장</button><button class="btn ghost" onclick="formatSurvey('surveyJson')">JSON 정리</button><span class="hint" id="surveyMsg"></span></div>
+    </div>
+    <div class="panel">
+      <h2>2단계 · 관람 후 만족도 설문 (JSON)</h2>
+      <p class="hint">타입 추가: <code>matrix</code>(rows·cols, <code>na</code>로 "미참여" 열) · <code>numbers</code>(fields) · <code>textarea</code> · radio/checkbox에 <code>"other":true</code>면 기타 입력칸.</p>
+      <textarea id="survey2Json" style="min-height:360px"></textarea>
+      <div class="actions"><button class="btn" onclick="saveSurvey('survey2')">2단계 저장</button><button class="btn ghost" onclick="formatSurvey('survey2Json')">JSON 정리</button><span class="hint" id="survey2Msg"></span></div>
     </div>
   </div>
 
@@ -133,7 +152,7 @@ code{background:#0E0D11;padding:1px 5px;border-radius:2px;color:var(--gold-l);fo
     <div class="panel">
       <h2>추첨 방식</h2>
       <div class="row">
-        <div><label>기본 당첨 확률 (오픈 직후, 0~1)</label><input id="s_base_prob" type="number" step="0.01" min="0" max="1"></div>
+        <div><label>기본 당첨 확률 (오픈 직후, %)</label><input id="s_base_prob" type="number" step="1" min="0" max="100" placeholder="25"></div>
         <div><label>막판 전원당첨 — 마감 N분 전부터 100%</label><input id="s_final_rush_minutes" type="number" min="0"></div>
       </div>
       <p class="hint">확률은 오픈→마감 사이 시간 경과에 따라 자동 상승하고, 목표 페이스(정원×경과비율)보다 당첨이 적으면 가산, 너무 앞서면 감속합니다. 정원이 모두 소진되면 자동 매진. 테스트모드는 항상 50%.</p>
@@ -162,7 +181,7 @@ code{background:#0E0D11;padding:1px 5px;border-radius:2px;color:var(--gold-l);fo
 
 <script>
 const CFG=window.CHEF_CONFIG; const sb=supabase.createClient(CFG.SUPABASE_URL,CFG.SUPABASE_KEY);
-const $=s=>document.querySelector(s); let PW=sessionStorage.getItem('chef_admin_pw')||''; let OV=null; let ROWS=[];
+const $=s=>document.querySelector(s); let PW=sessionStorage.getItem('chef_admin_pw')||''; let OV=null; let ROWS=[]; let FB=[];
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2500);}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function kst(iso){if(!iso)return '';return new Date(iso).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});}
@@ -174,7 +193,7 @@ async function login(){ PW=$('#pw').value; try{ await api('login'); sessionStora
 function logout(){ sessionStorage.removeItem('chef_admin_pw'); location.reload(); }
 async function show(){ $('#loginView').style.display='none'; $('#adminView').style.display='block'; await refresh(); }
 $('#pw').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('#tab-'+b.dataset.tab).classList.add('on'); if(b.dataset.tab==='entries'&&!ROWS.length) loadEntries();});
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('#tab-'+b.dataset.tab).classList.add('on'); if(b.dataset.tab==='entries'&&!ROWS.length) loadEntries(); if(b.dataset.tab==='feedback'&&!FB.length) loadFeedback();});
 
 async function refresh(){
   OV=await api('overview',{test:false});
@@ -182,6 +201,7 @@ async function refresh(){
   $('#testBadge').style.display=OV.settings.test_mode?'inline-block':'none';
   renderDash(); renderSessForms(); fillSettings();
   $('#fSession').innerHTML='<option value="">전체</option>'+OV.sessions.map(s=>`<option value="${s.id}">${s.day_label} ${s.round_label}</option>`).join('');
+  $('#fbCount').textContent=`실제 응답 ${OV.feedback_count}건`;
   $('#testCounts').textContent=`테스트 응모 ${OV.test_counts.entries}건 / 테스트 당첨 ${OV.test_counts.won}건`;
 }
 function renderDash(){
@@ -229,15 +249,15 @@ async function saveSess(id){
 }
 async function resetSess(id){ if(!confirm(`[${id}] 회차의 실제 응모·당첨 데이터를 모두 삭제합니다. 되돌릴 수 없습니다. 진행할까요?`)) return; if(prompt('확인을 위해 "삭제"를 입력하세요')!=='삭제') return; await api('reset_session',{session_id:id}); toast('초기화됨'); refresh(); }
 
-function fillSettings(){ const s=OV.settings; ['event_name','program_name','chef_name','tagline','notice','base_prob','final_rush_minutes','staff_pin'].forEach(k=>$('#s_'+k).value=s[k]); $('#s_test_mode').checked=!!s.test_mode; $('#s_admin_password').value=''; $('#surveyJson').value=JSON.stringify(s.survey,null,2); }
+function fillSettings(){ const s=OV.settings; ['event_name','program_name','chef_name','tagline','notice','final_rush_minutes','staff_pin'].forEach(k=>$('#s_'+k).value=s[k]); $('#s_base_prob').value=Math.round(Number(s.base_prob)*100); $('#s_test_mode').checked=!!s.test_mode; $('#s_admin_password').value=''; $('#surveyJson').value=JSON.stringify(s.survey,null,2); $('#survey2Json').value=JSON.stringify(s.survey2||[],null,2); $('#fbLink').textContent=location.origin+location.pathname.replace(/admin\.html$/,'')+'?fb=1'; }
 async function saveSettings(){
   const p={}; ['event_name','program_name','chef_name','tagline','notice','staff_pin','admin_password'].forEach(k=>p[k]=$('#s_'+k).value);
-  p.base_prob=parseFloat($('#s_base_prob').value); p.final_rush_minutes=parseInt($('#s_final_rush_minutes').value); p.test_mode=$('#s_test_mode').checked;
+  p.base_prob=parseFloat($('#s_base_prob').value)/100; if(!(p.base_prob>=0&&p.base_prob<=1)) return toast('기본 당첨 확률은 0~100 사이 %로 입력'); p.final_rush_minutes=parseInt($('#s_final_rush_minutes').value); p.test_mode=$('#s_test_mode').checked;
   if(!/^\d{4,6}$/.test(p.staff_pin)) return toast('스탭 PIN은 숫자 4~6자리');
   await api('save_settings',p); if(p.admin_password){ PW=p.admin_password; sessionStorage.setItem('chef_admin_pw',PW);} toast('설정 저장됨'); refresh();
 }
-function formatSurvey(){ try{ $('#surveyJson').value=JSON.stringify(JSON.parse($('#surveyJson').value),null,2); $('#surveyMsg').textContent='정리됨'; }catch(e){ $('#surveyMsg').textContent='JSON 오류: '+e.message; } }
-async function saveSurvey(){ let j; try{ j=JSON.parse($('#surveyJson').value); if(!Array.isArray(j)) throw new Error('배열이어야 합니다'); const keys=new Set(); for(const q of j){ if(!q.key||!q.label||!q.type) throw new Error('key/label/type 필수: '+JSON.stringify(q)); if(keys.has(q.key)) throw new Error('key 중복: '+q.key); keys.add(q.key);} }catch(e){ $('#surveyMsg').textContent='JSON 오류: '+e.message; return; } await api('save_settings',{survey:j}); $('#surveyMsg').textContent='저장됨'; toast('설문 저장됨'); }
+function formatSurvey(id){ const m=id==='surveyJson'?'#surveyMsg':'#survey2Msg'; try{ $('#'+id).value=JSON.stringify(JSON.parse($('#'+id).value),null,2); $(m).textContent='정리됨'; }catch(e){ $(m).textContent='JSON 오류: '+e.message; } }
+async function saveSurvey(which){ const id=which==='survey'?'#surveyJson':'#survey2Json', m=which==='survey'?'#surveyMsg':'#survey2Msg'; let j; try{ j=JSON.parse($(id).value); if(!Array.isArray(j)) throw new Error('배열이어야 합니다'); const keys=new Set(); for(const q of j){ if(!q.key||!q.label||!q.type) throw new Error('key/label/type 필수: '+JSON.stringify(q)); if(keys.has(q.key)) throw new Error('key 중복: '+q.key); keys.add(q.key);} }catch(e){ $(m).textContent='JSON 오류: '+e.message; return; } await api('save_settings',{[which]:j}); $(m).textContent='저장됨'; toast('설문 저장됨'); }
 async function deleteTest(){ if(!confirm('테스트 데이터를 모두 삭제할까요?')) return; await api('delete_test'); toast('테스트 데이터 삭제됨'); refresh(); }
 
 async function loadEntries(){
@@ -270,6 +290,21 @@ function downloadCSV(){
   for(const e of ROWS){ const a={...flat(e),_sms:(e.answers||{})._sms}; const row=[e.day_label+' '+e.round_label,e.ticket_no??'',e.ticket_code??'',e.name,fmtPhone(e.phone),e.region,e.gender,e.age_group,a._sms?'O':'',e.won?'당첨':'낙첨',e.prob!=null?Math.round(e.prob*100)+'%':'',kst(e.used_at),kst(e.created_at),e.note||'',...qkeys.map(k=>Array.isArray(a[k])?a[k].join('|'):(a[k]??''))];
     lines.push(row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')); }
   const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}); const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download='chef_table_'+($('#fSession').value||'all')+'_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(u);
+}
+async function loadFeedback(){
+  const r=await api('feedback',{test:$('#fbTest').checked}); FB=r.rows; $('#fbCount').textContent=`${FB.length}건`;
+  const avg=o=>{const v=Object.values(o||{}).filter(x=>typeof x==='number'&&x>0);return v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(2):'';};
+  $('#fbTable tbody').innerHTML=FB.map((f,i)=>{const a=f.answers||{};const en=f.entry;const chef=a.prog&&a.prog.chef;
+    return `<tr><td>${i+1}</td><td>${kst(f.created_at)}</td><td>${esc(f.name||'')}</td><td>${esc(fmtPhone(f.phone))}</td><td>${en?esc(en.session_id):'<span class="hint">응모없음</span>'}</td><td>${en&&en.won?'<span class="pill win">당첨</span>':''}</td><td>${avg(a.sat)}</td><td>${chef===0?'미참여':(chef??'')}</td><td style="white-space:normal;max-width:300px">${esc(a.comment||'')}</td><td><button class="btn danger sm" onclick="delFb(${f.id})">삭제</button></td></tr>`;}).join('');
+}
+async function delFb(id){ if(!confirm('이 응답을 삭제할까요?')) return; await api('delete_feedback',{id}); loadFeedback(); }
+function downloadFbCSV(){
+  if(!FB.length) return toast('먼저 조회하세요');
+  const flat=o=>{const r={};for(const [k,v] of Object.entries(o||{})){if(v&&typeof v==='object'&&!Array.isArray(v)){for(const [k2,v2] of Object.entries(v))r[k+'.'+k2]=v2;}else r[k]=Array.isArray(v)?v.join('|'):v;}return r;};
+  const rows=FB.map(f=>{const en=f.entry||{};return {제출시각:kst(f.created_at),이름:f.name||'',전화:fmtPhone(f.phone),응모회차:en.session_id||'',당첨:en.won?'O':'',지역:en.region||'',성별:en.gender||'',연령:en.age_group||'',...flat(en.answers||{}),...flat(f.answers)};});
+  const keys=[...new Set(rows.flatMap(r=>Object.keys(r)))].filter(k=>k!=='_sms');
+  const lines=[keys.join(','),...rows.map(r=>keys.map(k=>'"'+String(r[k]??'').replace(/"/g,'""')+'"').join(','))];
+  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='chef_feedback_'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(u);
 }
 if(PW){ api('login').then(show).catch(()=>{}); }
 setInterval(()=>{ if($('#adminView').style.display!=='none' && $('#tab-dash').classList.contains('on')) refresh().catch(()=>{}); },20000);
