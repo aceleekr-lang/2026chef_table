@@ -339,8 +339,17 @@ async function loadMine(){
 }
 function renderSessions(){
   const wrap = $('#sessions'); wrap.innerHTML='';
+  const kstDay = iso => new Date(iso).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul'});
+  const today = kstDay(STATE.now);
+  // 당일 회차만 표시 (테스트모드는 전체). 당일 회차가 없으면 안내만.
+  const list = STATE.test_mode ? STATE.sessions : STATE.sessions.filter(s=>kstDay(s.open_at)===today);
+  if(!list.length && STATE.sessions.length){
+    const up = STATE.sessions.filter(s=>new Date(s.open_at)>new Date(STATE.now));
+    wrap.innerHTML = `<div class="card"><p class="sub">${up.length ? '응모는 행사 당일에 열립니다.<br>'+up.map(s=>`${esc(s.date_label)} ${esc(s.round_label)} · 시식 ${esc(s.tasting_time)}`).join('<br>') : '모든 회차의 응모가 종료되었습니다.<br>찾아 주셔서 감사합니다.'}</p></div>`;
+    return;
+  }
   const byDay = {};
-  STATE.sessions.forEach(s=>{ (byDay[s.day_label] ||= []).push(s); });
+  list.forEach(s=>{ (byDay[s.day_label] ||= []).push(s); });
   Object.entries(byDay).forEach(([day, list])=>{
     const h = document.createElement('div'); h.className='eyebrow'; h.style.textAlign='left'; h.style.marginTop='18px'; h.textContent = list[0].date_label + ' · ' + day; wrap.appendChild(h);
     list.forEach(s=>{
