@@ -298,6 +298,17 @@ function deviceId(){
   return id;
 }
 const DEVICE = deviceId();
+async function rpc(name, args, tries=3){
+  let last;
+  for(let i=0;i<tries;i++){
+    try{
+      const r = await Promise.race([ sb.rpc(name,args), new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),12000)) ]);
+      if(r.error){ const m=String(r.error.message||''); if(/fetch|network|timeout|gateway|50\d/i.test(m) && i<tries-1){ last=r.error; await new Promise(x=>setTimeout(x,800*(i+1))); continue; } return r; }
+      return r;
+    }catch(e){ last=e; await new Promise(x=>setTimeout(x,800*(i+1))); }
+  }
+  return {data:null, error:last||new Error('연결 실패')};
+}
 
 function go(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); $('#'+id).classList.add('active'); window.scrollTo(0,0); }
 function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2600); }
@@ -308,7 +319,7 @@ function imgOr(el, src, cls){ const im=new Image(); im.onload=()=>{ el.style.bac
 
 // ---------- 로드 ----------
 async function loadState(){
-  const {data, error} = await sb.rpc('chef_public_state', {p_test: TEST});
+  const {data, error} = await rpc('chef_public_state', {p_test: TEST});
   if(error){ throw error; }
   STATE = data;
   $('#banner').classList.toggle('show', !!STATE.test_mode);
@@ -322,7 +333,7 @@ async function loadState(){
   renderSessions();
 }
 async function loadMine(){
-  const {data} = await sb.rpc('chef_my_entries', {p_device: DEVICE, p_test: TEST});
+  const {data} = await rpc('chef_my_entries', {p_device: DEVICE, p_test: TEST});
   MY = data || [];
   renderMine();
 }
@@ -465,11 +476,16 @@ $('#surveyForm').addEventListener('submit', async ev=>{
 // 저장된 설문으로 바로 응모 (같은 날 다른 회차 재도전)
 async function doDraw(session, pf, errSel){
   try{
-    const {data, error} = await sb.rpc('chef_draw', {p_device:DEVICE, p_session:session.id, p_name:pf.name, p_phone:pf.phone,
+    const {data, error} = await rpc('chef_draw', {p_device:DEVICE, p_session:session.id, p_name:pf.name, p_phone:pf.phone,
       p_region:pf.region, p_gender:pf.gender, p_age:pf.age, p_answers:pf.answers, p_test:TEST});
     if(error) throw error;
     DRAW = data; CUR_SESSION = session; DRAWN.add(session.id);
     if(data.result==='win' || data.result==='lose'){ spinWheel(data.result==='win'); }
+    else if(data.result==='already' && data.won!==undefined && !MY.find(m=>m.session_id===session.id)){
+      // 첫 요청이 서버엔 저장됐지만 응답을 못 받은 경우 → 결과를 룰렛으로 보여줌
+      DRAW = Object.assign({}, data, {name:pf.name, day_label:session.day_label, round_label:session.round_label, date_label:session.date_label, tasting_time:session.tasting_time, host_time:session.host_time, session_id:session.id, is_test:TEST});
+      spinWheel(!!data.won);
+    }
     else { showOther(data); }
     return true;
   }catch(e){ console.error(e); const m='처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요. ('+(e.message||e)+')'; if(errSel) showErr(errSel,m); else toast(m); return false; }
@@ -538,7 +554,7 @@ $('#fbForm').addEventListener('submit', async ev=>{
   $('#fbErr').style.display='none';
   const btn=$('#btnFb'); btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
   try{
-    const {data,error}=await sb.rpc('chef_feedback_submit',{p_device:DEVICE,p_phone:phone,p_name:(fd.get('name')||'').trim(),p_answers:col.answers,p_test:TEST});
+    const {data,error}=await rpc('chef_feedback_submit',{p_device:DEVICE,p_phone:phone,p_name:(fd.get('name')||'').trim(),p_answers:col.answers,p_test:TEST});
     if(error) throw error;
     if(data.ok || data.already){ localStorage.setItem('chef_fb_done','1');
       $('#resultBody').innerHTML=`<div class="result-mark" style="padding-top:40px">✦</div><h2 class="result-h win">${data.ok?'감사합니다':'이미 참여하셨습니다'}</h2><p class="sub mt">${data.ok?'소중한 의견이 축제 발전에 쓰입니다.<br>셰프의 테이블과 함께한 시간이 즐거우셨길 바랍니다.':esc(data.message)}</p><button class="btn ghost" onclick="go('scr-home')">처음으로</button>`;
@@ -562,10 +578,13 @@ function drawWheel(rot){
     else { g.addColorStop(0,'#2A2730'); g.addColorStop(1,'#0E0D11'); }
     ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,R,a0,a1); ctx.closePath(); ctx.fillStyle=g; ctx.fill();
     ctx.strokeStyle='rgba(201,166,70,.5)'; ctx.lineWidth=1.5; ctx.stroke();
-    ctx.save(); ctx.rotate(a0+Math.PI/SEG); ctx.textAlign='right'; ctx.textBaseline='middle';
+    ctx.save(); ctx.rotate(a0+Math.PI/SEG); ctx.textBaseline='middle';
     ctx.fillStyle = win ? '#1A1400' : '#C9A646';
     ctx.font = (win?'600 ':'300 ')+'26px "Noto Serif KR", serif';
-    ctx.fillText(win?'시식권':'다음 기회', R-22, 0); ctx.restore();
+    const ang=((a0+Math.PI/SEG+rot)%(2*Math.PI)+2*Math.PI)%(2*Math.PI);
+    if(ang>Math.PI/2 && ang<Math.PI*1.5){ ctx.rotate(Math.PI); ctx.textAlign='left'; ctx.fillText(win?'시식권':'다음 기회', -(R-22), 0); }
+    else { ctx.textAlign='right'; ctx.fillText(win?'시식권':'다음 기회', R-22, 0); }
+    ctx.restore();
   }
   ctx.restore();
   ctx.beginPath(); ctx.arc(cx,cy,R-2,0,Math.PI*2); ctx.strokeStyle='#C9A646'; ctx.lineWidth=4; ctx.stroke();
@@ -641,7 +660,7 @@ $('#pinOk').addEventListener('click', async ()=>{
   const pin=[...document.querySelectorAll('#pinModal .pin input')].map(i=>i.value).join('');
   if(pin.length<4) return showErr('#pinErr','PIN 4자리를 입력해 주세요.');
   const b=$('#pinOk'); b.disabled=true;
-  const {data, error} = await sb.rpc('chef_use_ticket',{p_code:TICKET.ticket_code, p_pin:pin});
+  const {data, error} = await rpc('chef_use_ticket',{p_code:TICKET.ticket_code, p_pin:pin});
   b.disabled=false;
   if(error) return showErr('#pinErr','오류: '+error.message);
   if(!data.ok){ if(data.already){ closePin(); TICKET.used_at=data.used_at; showTicket(TICKET); } return showErr('#pinErr',data.message); }
