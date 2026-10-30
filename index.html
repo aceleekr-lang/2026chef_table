@@ -185,6 +185,7 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.2
   <p class="sub" id="h-tagline"></p>
   <div class="rule"><span>Tasting Ticket</span></div>
   <div id="sessions"></div>
+  <p class="note" id="profileNote" style="display:none"></p>
   <div id="mine"></div>
   <p class="note" id="h-notice"></p>
   <div class="rule"><span>Survey</span></div>
@@ -198,6 +199,7 @@ h1.title{font-family:var(--serif);font-weight:600;font-size:34px;line-height:1.2
   <div class="eyebrow" style="padding-top:28px">Reservation</div>
   <h1 class="title" style="font-size:26px">간단한 설문 후<br>룰렛에 도전하세요</h1>
   <p class="sub" id="s-session"></p>
+  <p class="note">설문은 1인 1회입니다. 제출 후 같은 날 다른 회차에 도전할 때는 다시 작성하지 않습니다.</p>
   <div class="rule"><span>Guest</span></div>
   <form id="surveyForm" novalidate>
     <div class="row2">
@@ -285,8 +287,9 @@ const CFG = window.CHEF_CONFIG;
 const sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_KEY);
 const qs = new URLSearchParams(location.search);
 const TEST = qs.get('test') === '1';
+if(qs.get('reset')==='1'){ ['chef_profile','chef_guest','chef_fb_done'].forEach(k=>localStorage.removeItem(k)); if(TEST) localStorage.removeItem('chef_device_id'); }
 const $ = s => document.querySelector(s);
-let STATE = null, MY = [], DRAW = null, CUR_SESSION = null;
+let STATE = null, MY = [], DRAW = null, CUR_SESSION = null; const DRAWN = new Set();
 
 // ---------- 기기 ID ----------
 function deviceId(){
@@ -341,7 +344,7 @@ function renderSessions(){
           <span class="remain">${st==='open' ? '남은 시식권 '+s.remaining+' / '+s.capacity : ''}</span></div>
         <span class="badge ${st}">${label}</span></div>`;
       if(st==='open' && !mineEntry && !MY.some(m=>m.won)){
-        const b=document.createElement('button'); b.className='btn sm'; b.textContent=s.round_label+' 응모하기'; b.onclick=()=>startSurvey(s); card.appendChild(b);
+        const b=document.createElement('button'); b.className='btn sm'; b.textContent=s.round_label+(savedProfile()?' 바로 응모 (설문 완료)':' 응모하기'); b.onclick=()=>quickDraw(s); card.appendChild(b);
       } else if(mineEntry){
         const b=document.createElement('button'); b.className='btn sm ghost'; b.textContent = mineEntry.won ? '내 시식권 보기' : '응모 완료 (낙첨)'; if(mineEntry.won) b.onclick=()=>showTicket(mineEntry); else b.disabled=true; card.appendChild(b);
       }
@@ -350,7 +353,15 @@ function renderSessions(){
   });
   if(!STATE.sessions.length) wrap.innerHTML='<p class="note">운영 중인 회차가 없습니다.</p>';
 }
+function renderProfileNote(){
+  const pf=savedProfile(); const n=$('#profileNote');
+  if(!pf){ n.style.display='none'; return; }
+  n.style.display='block';
+  n.innerHTML=`${esc(pf.name)} 님 · 설문 제출 완료 (${maskPhone(pf.phone)})<br><button class="link" onclick="clearProfile()">이 폰에서 다른 분이 응모하려면 여기를 눌러 설문을 다시 작성하세요</button>`;
+}
+function clearProfile(){ if(!confirm('저장된 설문을 지우고 처음부터 다시 작성할까요?')) return; localStorage.removeItem('chef_profile'); localStorage.removeItem('chef_guest'); toast('설문 정보를 지웠습니다'); renderMine(); }
 function renderMine(){
+  renderProfileNote();
   const win = MY.find(m=>m.won);
   const m = $('#mine'); m.innerHTML='';
   if(win){
@@ -444,18 +455,32 @@ $('#surveyForm').addEventListener('submit', async ev=>{
   answers._sms = !!fd.get('sms');
   $('#surveyErr').style.display='none';
   localStorage.setItem('chef_guest', JSON.stringify({name, phone:f.phone.value}));
+  const profile = {name, phone, region:fd.get('sido'), gender:fd.get('gender'), age:fd.get('age'), answers};
   const btn=$('#btnDraw'); btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
-  try{
-    const region = fd.get('sido');
-    const {data, error} = await sb.rpc('chef_draw', {p_device:DEVICE, p_session:CUR_SESSION.id, p_name:name, p_phone:phone,
-      p_region:region, p_gender:fd.get('gender'), p_age:fd.get('age'), p_answers:answers, p_test:TEST});
-    if(error) throw error;
-    DRAW = data;
-    if(data.result==='win' || data.result==='lose'){ spinWheel(data.result==='win'); }
-    else { showOther(data); }
-  }catch(e){ console.error(e); showErr('#surveyErr','처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요. ('+(e.message||e)+')'); }
+  const ok = await doDraw(CUR_SESSION, profile, '#surveyErr');
+  if(ok) localStorage.setItem('chef_profile', JSON.stringify(profile));
   btn.disabled=false; btn.textContent='룰렛 돌리기';
 });
+// 저장된 설문으로 바로 응모 (같은 날 다른 회차 재도전)
+async function doDraw(session, pf, errSel){
+  try{
+    const {data, error} = await sb.rpc('chef_draw', {p_device:DEVICE, p_session:session.id, p_name:pf.name, p_phone:pf.phone,
+      p_region:pf.region, p_gender:pf.gender, p_age:pf.age, p_answers:pf.answers, p_test:TEST});
+    if(error) throw error;
+    DRAW = data; CUR_SESSION = session; DRAWN.add(session.id);
+    if(data.result==='win' || data.result==='lose'){ spinWheel(data.result==='win'); }
+    else { showOther(data); }
+    return true;
+  }catch(e){ console.error(e); const m='처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요. ('+(e.message||e)+')'; if(errSel) showErr(errSel,m); else toast(m); return false; }
+}
+function savedProfile(){ try{ const p=JSON.parse(localStorage.getItem('chef_profile')||'null'); return (p&&p.name&&p.phone&&p.answers)?p:null; }catch(e){ return null; } }
+async function quickDraw(session){
+  const pf=savedProfile(); if(!pf) return startSurvey(session);
+  CUR_SESSION=session; $('#w-session').textContent=`${session.date_label} ${session.day_label} ${session.round_label}`;
+  $('#w-msg').textContent='이미 제출하신 설문으로 바로 응모합니다…'; go('scr-wheel');
+  await doDraw(session, pf, null);
+  $('#w-msg').textContent='룰렛이 멈출 때까지 잠시만요…';
+}
 
 function collectAnswers(fd, list){
   const answers = {};
@@ -565,10 +590,10 @@ function showResult(win){
       <p class="sub mt">${esc(DRAW.name)} 님, <b style="color:var(--gold-l)">${esc(DRAW.day_label)} ${esc(DRAW.round_label)}</b> 시식권에 당첨되셨습니다.<br>시식 ${esc(DRAW.tasting_time)} · 무대 앞 시식존</p>
       <button class="btn" onclick="showTicketFromDraw()">시식권 받기</button>`;
   } else {
-    const others = STATE.sessions.filter(s=>s.status==='open' && s.id!==DRAW.session_id && !MY.find(m=>m.session_id===s.id) && s.id!==CUR_SESSION.id);
+    const others = STATE.sessions.filter(s=>s.status==='open' && s.remaining>0 && s.id!==CUR_SESSION.id && s.day_label===CUR_SESSION.day_label && !DRAWN.has(s.id) && !MY.find(m=>m.session_id===s.id));
     html = `<div class="result-mark" style="padding-top:40px">∅</div><h2 class="result-h">아쉽지만 다음 기회에</h2>
-      <p class="sub mt">이번 회차 시식권은 함께하지 못했습니다.<br>${others.length ? '오늘 다른 회차에 한 번 더 도전하실 수 있어요.' : '셰프의 요리시연은 누구나 관람하실 수 있습니다.'}</p>
-      ${others.map(s=>`<button class="btn" onclick='startSurvey(${JSON.stringify(s).replace(/'/g,"&#39;")})'>${esc(s.round_label)} 다시 도전</button>`).join('')}
+      <p class="sub mt">이번 회차 시식권은 함께하지 못했습니다.<br>${others.length ? '오늘 다른 회차에 한 번 더 도전하실 수 있어요.<br>설문은 다시 작성하지 않아도 됩니다.' : '오늘 응모 기회는 모두 사용하셨습니다.<br>셰프의 요리시연은 누구나 관람하실 수 있습니다.'}</p>
+      ${others.map(s=>`<button class="btn" onclick='quickDraw(${JSON.stringify(s).replace(/'/g,"&#39;")})'>${esc(s.day_label)} ${esc(s.round_label)} 다시 도전</button>`).join('')}
       <button class="btn ghost" onclick="go('scr-home');loadMine()">처음으로</button>`;
   }
   $('#resultBody').innerHTML = html; go('scr-result'); loadMine();
