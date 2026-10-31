@@ -80,7 +80,7 @@ code{background:#0E0D11;padding:1px 5px;border-radius:2px;color:var(--gold-l);fo
     </div>
   </div>
   <div class="tabs">
-    <button class="on" data-tab="dash">현황</button><button data-tab="sess">회차 설정</button><button data-tab="entries">응모·당첨자</button><button data-tab="results">설문 결과</button><button data-tab="feedback">만족도 설문</button><button data-tab="survey">설문 편집</button><button data-tab="set">기본 설정</button>
+    <button class="on" data-tab="dash">현황</button><button data-tab="sess">회차 설정</button><button data-tab="entries">응모·당첨자</button><button data-tab="results">설문 결과</button><button data-tab="feedback" id="tabFbBtn">만족도 설문(2단계)</button><button data-tab="survey">설문 편집</button><button data-tab="set">기본 설정</button>
   </div>
 
   <div class="tab on" id="tab-dash">
@@ -117,6 +117,7 @@ code{background:#0E0D11;padding:1px 5px;border-radius:2px;color:var(--gold-l);fo
         <label><input type="checkbox" id="rDedup" checked> 1인 1응답 (전화번호 중복 제거)</label>
         <label><input type="checkbox" id="rTest"> 테스트 데이터</label>
         <button class="btn sm" onclick="loadResults()">집계</button>
+        <button class="btn ghost sm" onclick="downloadResultsCSV()">CSV 다운로드 (설문 전체·만족도 포함)</button>
         <span class="hint" id="rCount"></span>
       </div>
     </div>
@@ -212,6 +213,7 @@ async function refresh(){
   OV=await api('overview',{test:false});
   $('#nowLine').textContent='서버 시각 '+kst(OV.now)+' (KST)';
   $('#testBadge').style.display=OV.settings.test_mode?'inline-block':'none';
+  $('#tabFbBtn').style.display=(OV.settings.survey2&&OV.settings.survey2.length)||OV.feedback_count>0?'':'none';
   renderDash(); renderSessForms(); fillSettings();
   $('#fSession').innerHTML=$('#rSession').innerHTML='<option value="">전체</option>'+OV.sessions.map(s=>`<option value="${s.id}">${s.day_label} ${s.round_label}</option>`).join('');
   $('#fbCount').textContent=`실제 응답 ${OV.feedback_count}건`;
@@ -338,11 +340,12 @@ function showAnswers(id){
 }
 function openModal(title, html){ let m=$('#modal'); if(!m){ m=document.createElement('div'); m.id='modal'; m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:20;display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto'; m.onclick=ev=>{ if(ev.target===m) m.remove(); }; document.body.appendChild(m);} m.innerHTML=`<div class="panel" style="max-width:720px;width:100%"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${title}</h2><button class="btn ghost sm" onclick="document.getElementById('modal').remove()">닫기</button></div><div style="font-size:13px">${html}</div></div>`; }
 function bar(n,total,label){ const pct=total?Math.round(n/total*100):0; return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0"><span style="flex:0 0 46%;white-space:normal">${esc(label)}</span><div class="bar" style="flex:1;margin:0"><i style="width:${pct}%"></i></div><span style="flex:0 0 90px;text-align:right;font-family:'Cormorant Garamond',serif;font-size:15px;color:var(--gold-l)">${n}명 · ${pct}%</span></div>`; }
+let RROWS=[];
 async function loadResults(){
   const r=await api('entries',{session_id:$('#rSession').value,won_only:false,test:$('#rTest').checked});
   let rows=r.rows;
   if($('#rDedup').checked){ const seen=new Set(); rows=rows.filter(e=>{ if(seen.has(e.phone)) return false; seen.add(e.phone); return true; }); }
-  const N=rows.length; $('#rCount').textContent=`응답 ${N}건`;
+  RROWS=rows; const N=rows.length; $('#rCount').textContent=`응답 ${N}건`;
   const out=[]; const qs=OV.settings.survey||[];
   const countOf=(getter,order)=>{ const c={}; rows.forEach(e=>{ let v=getter(e); if(v==null||v==='') return; (Array.isArray(v)?v:[v]).forEach(x=>{ x=String(x).startsWith('기타')?'기타':x; c[x]=(c[x]||0)+1; }); }); const keys=order?order.filter(k=>k in c).concat(Object.keys(c).filter(k=>!order.includes(k))):Object.keys(c).sort((a,b)=>c[b]-c[a]); return keys.map(k=>[k,c[k]]); };
   const section=(title,inner)=>`<div class="panel"><h2>${esc(title)}</h2>${inner}</div>`;
@@ -370,6 +373,14 @@ async function loadResults(){
   const sms=rows.filter(e=>(e.answers||{})._sms).length;
   out.push(section('문자 수신 동의', bar(sms,N,'동의')+bar(N-sms,N,'미동의')));
   $('#results').innerHTML=`<p class="hint">응답 ${N}건 기준${$('#rDedup').checked?' (전화번호 중복 제거)':''}. 세부 응답은 「응모·당첨자」 탭의 「설문」 버튼, 엑셀은 CSV 다운로드.</p>`+out.join('');
+}
+function downloadResultsCSV(){
+  if(!RROWS.length) return toast('먼저 「집계」를 누르세요');
+  const qs=OV.settings.survey||[]; const flat=e=>{const a=e.answers||{},o={};for(const q of qs){const v=a[q.key];if(q.type==='matrix'){for(const r of (q.rows||[]))o[q.label.slice(0,12)+' | '+r.label]=v&&v[r.key]!=null?(v[r.key]===0?'미참여':v[r.key]):'';}else if(q.type==='numbers'){for(const f of (q.fields||[]))o[f.label]=v?(v[f.key]??''):'';}else o[q.label]=Array.isArray(v)?v.join('|'):(v??'');}return o;};
+  const rows=RROWS.map(e=>({응모시각:kst(e.created_at),회차:e.day_label+' '+e.round_label,이름:e.name,전화:fmtPhone(e.phone),지역:e.region,성별:e.gender,연령:e.age_group,결과:e.won?'당첨':'낙첨',티켓:e.ticket_code||'',문자동의:(e.answers||{})._sms?'O':'',...flat(e)}));
+  const keys=[...new Set(rows.flatMap(r=>Object.keys(r)))];
+  const lines=[keys.join(','),...rows.map(r=>keys.map(k=>'"'+String(r[k]??'').replace(/"/g,'""')+'"').join(','))];
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='chef_survey_'+($('#rSession').value||'all')+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(u);
 }
 if(PW){ api('login').then(show).catch(()=>{}); }
 setInterval(()=>{ if($('#adminView').style.display!=='none' && $('#tab-dash').classList.contains('on')) refresh().catch(()=>{}); },20000);
