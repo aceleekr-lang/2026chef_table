@@ -80,7 +80,7 @@ code{background:#0E0D11;padding:1px 5px;border-radius:2px;color:var(--gold-l);fo
     </div>
   </div>
   <div class="tabs">
-    <button class="on" data-tab="dash">현황</button><button data-tab="sess">회차 설정</button><button data-tab="entries">응모·당첨자</button><button data-tab="feedback">만족도 설문</button><button data-tab="survey">설문 편집</button><button data-tab="set">기본 설정</button>
+    <button class="on" data-tab="dash">현황</button><button data-tab="sess">회차 설정</button><button data-tab="entries">응모·당첨자</button><button data-tab="results">설문 결과</button><button data-tab="feedback">만족도 설문</button><button data-tab="survey">설문 편집</button><button data-tab="set">기본 설정</button>
   </div>
 
   <div class="tab on" id="tab-dash">
@@ -108,6 +108,19 @@ code{background:#0E0D11;padding:1px 5px;border-radius:2px;color:var(--gold-l);fo
       </div>
     </div>
     <div class="tbl"><table id="entryTable"><thead><tr><th>#</th><th>회차</th><th>No.</th><th>코드</th><th>이름</th><th>전화</th><th>지역</th><th>성별</th><th>연령</th><th>문자동의</th><th>결과</th><th>확률</th><th>사용</th><th>응모시각</th><th>메모</th><th>작업</th></tr></thead><tbody></tbody></table></div>
+  </div>
+
+  <div class="tab" id="tab-results">
+    <div class="panel">
+      <div class="chk">
+        <label>회차 <select id="rSession" style="width:auto;display:inline-block"><option value="">전체</option></select></label>
+        <label><input type="checkbox" id="rDedup" checked> 1인 1응답 (전화번호 중복 제거)</label>
+        <label><input type="checkbox" id="rTest"> 테스트 데이터</label>
+        <button class="btn sm" onclick="loadResults()">집계</button>
+        <span class="hint" id="rCount"></span>
+      </div>
+    </div>
+    <div id="results"></div>
   </div>
 
   <div class="tab" id="tab-feedback">
@@ -193,14 +206,14 @@ async function login(){ PW=$('#pw').value; try{ await api('login'); sessionStora
 function logout(){ sessionStorage.removeItem('chef_admin_pw'); location.reload(); }
 async function show(){ $('#loginView').style.display='none'; $('#adminView').style.display='block'; await refresh(); }
 $('#pw').addEventListener('keydown',e=>{if(e.key==='Enter')login();});
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('#tab-'+b.dataset.tab).classList.add('on'); if(b.dataset.tab==='entries'&&!ROWS.length) loadEntries(); if(b.dataset.tab==='feedback'&&!FB.length) loadFeedback();});
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('#tab-'+b.dataset.tab).classList.add('on'); if(b.dataset.tab==='entries'&&!ROWS.length) loadEntries(); if(b.dataset.tab==='results') loadResults(); if(b.dataset.tab==='feedback'&&!FB.length) loadFeedback();});
 
 async function refresh(){
   OV=await api('overview',{test:false});
   $('#nowLine').textContent='서버 시각 '+kst(OV.now)+' (KST)';
   $('#testBadge').style.display=OV.settings.test_mode?'inline-block':'none';
   renderDash(); renderSessForms(); fillSettings();
-  $('#fSession').innerHTML='<option value="">전체</option>'+OV.sessions.map(s=>`<option value="${s.id}">${s.day_label} ${s.round_label}</option>`).join('');
+  $('#fSession').innerHTML=$('#rSession').innerHTML='<option value="">전체</option>'+OV.sessions.map(s=>`<option value="${s.id}">${s.day_label} ${s.round_label}</option>`).join('');
   $('#fbCount').textContent=`실제 응답 ${OV.feedback_count}건`;
   $('#testCounts').textContent=`테스트 응모 ${OV.test_counts.entries}건 / 테스트 당첨 ${OV.test_counts.won}건`;
 }
@@ -272,6 +285,7 @@ async function loadEntries(){
     <td>${e.used_at?'<span class="pill used">'+kst(e.used_at)+'</span>':''}</td><td>${kst(e.created_at)}</td>
     <td>${esc(e.note||'')}</td>
     <td>${e.won?(e.used_at?`<button class="btn ghost sm" onclick="setUsed(${e.id},false)">사용취소</button>`:`<button class="btn ghost sm" onclick="setUsed(${e.id},true)">사용처리</button>`):`<button class="btn ghost sm" onclick="forceWin(${e.id})">당첨전환</button>`}
+      <button class="btn ghost sm" onclick="showAnswers(${e.id})">설문</button>
       <button class="btn ghost sm" onclick="setNote(${e.id},'${esc(e.note||'').replace(/'/g,'&#39;')}')">메모</button>
       <button class="btn danger sm" onclick="delEntry(${e.id})">삭제</button></td></tr>`).join('');
 }
@@ -305,6 +319,57 @@ function downloadFbCSV(){
   const keys=[...new Set(rows.flatMap(r=>Object.keys(r)))].filter(k=>k!=='_sms');
   const lines=[keys.join(','),...rows.map(r=>keys.map(k=>'"'+String(r[k]??'').replace(/"/g,'""')+'"').join(','))];
   const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download='chef_feedback_'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(u);
+}
+// ---------- 설문 결과 집계 ----------
+const SCALE_LBL=['매우불만','불만족','보통','만족','매우만족'];
+function answerText(q,v){
+  if(v==null||v==='') return '<span class="hint">-</span>';
+  if(q.type==='matrix'){ const cols=q.cols||SCALE_LBL; return (q.rows||[]).map(r=>{const x=v[r.key]; return `<div style="display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:3px 0"><span style="white-space:normal">${esc(r.label)}</span><b style="white-space:nowrap">${x===0?'미참여':(x?x+' · '+esc(cols[x-1]||''):'-')}</b></div>`;}).join(''); }
+  if(q.type==='numbers') return (q.fields||[]).map(f=>`${esc(f.label)}: <b>${v[f.key]??'-'}</b>${esc(f.unit||'')}`).join(' / ');
+  if(Array.isArray(v)) return esc(v.join(', '));
+  return esc(String(v));
+}
+function showAnswers(id){
+  const e=ROWS.find(r=>r.id===id); if(!e) return; const a=e.answers||{}; const qs=OV.settings.survey||[];
+  const body=`<div class="row" style="margin-bottom:10px"><div><label>이름</label>${esc(e.name)}</div><div><label>전화</label>${esc(fmtPhone(e.phone))}</div><div><label>지역</label>${esc(e.region)}</div><div><label>성별/연령</label>${esc(e.gender)} / ${esc(e.age_group)}</div><div><label>회차</label>${esc(e.day_label)} ${esc(e.round_label)} ${e.won?'<span class="pill win">당첨</span>':''}</div></div>`+
+    qs.map(q=>`<div style="margin:12px 0"><label>${esc(q.label)}</label><div>${answerText(q,a[q.key])}</div></div>`).join('')+
+    `<div style="margin:12px 0"><label>문자수신 동의</label>${a._sms?'동의':'미동의'}</div>`;
+  openModal(`${esc(e.name)} 님 설문 응답`, body);
+}
+function openModal(title, html){ let m=$('#modal'); if(!m){ m=document.createElement('div'); m.id='modal'; m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:20;display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;overflow:auto'; m.onclick=ev=>{ if(ev.target===m) m.remove(); }; document.body.appendChild(m);} m.innerHTML=`<div class="panel" style="max-width:720px;width:100%"><div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0">${title}</h2><button class="btn ghost sm" onclick="document.getElementById('modal').remove()">닫기</button></div><div style="font-size:13px">${html}</div></div>`; }
+function bar(n,total,label){ const pct=total?Math.round(n/total*100):0; return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0"><span style="flex:0 0 46%;white-space:normal">${esc(label)}</span><div class="bar" style="flex:1;margin:0"><i style="width:${pct}%"></i></div><span style="flex:0 0 90px;text-align:right;font-family:'Cormorant Garamond',serif;font-size:15px;color:var(--gold-l)">${n}명 · ${pct}%</span></div>`; }
+async function loadResults(){
+  const r=await api('entries',{session_id:$('#rSession').value,won_only:false,test:$('#rTest').checked});
+  let rows=r.rows;
+  if($('#rDedup').checked){ const seen=new Set(); rows=rows.filter(e=>{ if(seen.has(e.phone)) return false; seen.add(e.phone); return true; }); }
+  const N=rows.length; $('#rCount').textContent=`응답 ${N}건`;
+  const out=[]; const qs=OV.settings.survey||[];
+  const countOf=(getter,order)=>{ const c={}; rows.forEach(e=>{ let v=getter(e); if(v==null||v==='') return; (Array.isArray(v)?v:[v]).forEach(x=>{ x=String(x).startsWith('기타')?'기타':x; c[x]=(c[x]||0)+1; }); }); const keys=order?order.filter(k=>k in c).concat(Object.keys(c).filter(k=>!order.includes(k))):Object.keys(c).sort((a,b)=>c[b]-c[a]); return keys.map(k=>[k,c[k]]); };
+  const section=(title,inner)=>`<div class="panel"><h2>${esc(title)}</h2>${inner}</div>`;
+  // 고정 항목
+  out.push(section('거주 지역', countOf(e=>e.region).map(([k,n])=>bar(n,N,k)).join('')));
+  out.push(section('성별', countOf(e=>e.gender).map(([k,n])=>bar(n,N,k)).join('')));
+  out.push(section('연령대', countOf(e=>e.age_group,['10대 이하','20대','30대','40대','50대','60대 이상']).map(([k,n])=>bar(n,N,k)).join('')));
+  for(const q of qs){
+    if(q.type==='radio'||q.type==='select'||q.type==='checkbox'){
+      const list=countOf(e=>(e.answers||{})[q.key], q.options||[]);
+      const etc=rows.map(e=>(e.answers||{})[q.key]).flatMap(v=>Array.isArray(v)?v:[v]).filter(v=>typeof v==='string'&&v.startsWith('기타:')).map(v=>v.slice(3).trim());
+      out.push(section(q.label+(q.type==='checkbox'?' (복수응답)':''), list.map(([k,n])=>bar(n,N,k)).join('')+(etc.length?`<div class="hint" style="margin-top:6px">기타: ${esc(etc.join(' / '))}</div>`:'')));
+    } else if(q.type==='numbers'){
+      out.push(section(q.label, (q.fields||[]).map(f=>{ const vals=rows.map(e=>((e.answers||{})[q.key]||{})[f.key]).filter(v=>typeof v==='number'); const sum=vals.reduce((a,b)=>a+b,0); return `<div style="padding:3px 0">${esc(f.label)}: 합계 <b style="color:var(--gold-l)">${sum}</b>${esc(f.unit||'')} · 평균 <b style="color:var(--gold-l)">${vals.length?(sum/vals.length).toFixed(1):'-'}</b>${esc(f.unit||'')} (응답 ${vals.length})</div>`; }).join('')));
+    } else if(q.type==='matrix'){
+      const cols=q.cols||SCALE_LBL;
+      const rowsHtml=(q.rows||[]).map(r=>{ const vals=rows.map(e=>((e.answers||{})[q.key]||{})[r.key]); const rated=vals.filter(v=>typeof v==='number'&&v>0); const na=vals.filter(v=>v===0).length; const avg=rated.length?(rated.reduce((a,b)=>a+b,0)/rated.length):0; const dist=cols.map((c,i)=>rated.filter(v=>v===i+1).length);
+        return `<tr>${r.group?`<td style="color:var(--gold);white-space:nowrap">${esc(r.group)}</td>`:'<td></td>'}<td style="white-space:normal;min-width:220px">${esc(r.label)}</td><td style="text-align:right;font-family:'Cormorant Garamond',serif;font-size:16px;color:var(--gold-l)"><b>${rated.length?avg.toFixed(2):'-'}</b></td><td class="hint">${rated.length}</td>${dist.map(d=>`<td style="text-align:right">${d}</td>`).join('')}${q.na?`<td style="text-align:right" class="hint">${na}</td>`:''}</tr>`; }).join('');
+      out.push(section(q.label, `<div class="tbl" style="max-height:none"><table><thead><tr><th>구분</th><th>항목</th><th style="text-align:right">평균(5점)</th><th>응답</th>${cols.map((c,i)=>`<th style="text-align:right">${i+1} ${esc(c)}</th>`).join('')}${q.na?`<th style="text-align:right">${esc(q.na)}</th>`:''}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`));
+    } else {
+      const texts=rows.map(e=>[e,(e.answers||{})[q.key]]).filter(([e,v])=>v&&String(v).trim());
+      out.push(section(q.label+` (${texts.length}건)`, texts.length?`<div class="tbl" style="max-height:50vh"><table><tbody>${texts.map(([e,v])=>`<tr><td class="hint" style="white-space:nowrap">${kst(e.created_at)}</td><td class="hint">${esc(e.name)}</td><td style="white-space:normal">${esc(v)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="hint">응답 없음</p>'));
+    }
+  }
+  const sms=rows.filter(e=>(e.answers||{})._sms).length;
+  out.push(section('문자 수신 동의', bar(sms,N,'동의')+bar(N-sms,N,'미동의')));
+  $('#results').innerHTML=`<p class="hint">응답 ${N}건 기준${$('#rDedup').checked?' (전화번호 중복 제거)':''}. 세부 응답은 「응모·당첨자」 탭의 「설문」 버튼, 엑셀은 CSV 다운로드.</p>`+out.join('');
 }
 if(PW){ api('login').then(show).catch(()=>{}); }
 setInterval(()=>{ if($('#adminView').style.display!=='none' && $('#tab-dash').classList.contains('on')) refresh().catch(()=>{}); },20000);
